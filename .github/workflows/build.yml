@@ -1,0 +1,61 @@
+name: Build xamonxx naga8gen5 driver
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - build_naga8gen5.sh
+      - patches/**
+      - .github/workflows/build.yml
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build unzip flex bison git perl python3-pip glslang-tools curl zip pkg-config
+          pip3 install --break-system-packages meson mako pyyaml
+
+      - name: Build (perf flavor)
+        id: perf
+        continue-on-error: true
+        run: FLAVOR=perf bash build_naga8gen5.sh
+
+      - name: Build (safe flavor fallback)
+        if: steps.perf.outcome == 'failure'
+        run: FLAVOR=safe bash build_naga8gen5.sh
+
+      - name: Collect output
+        id: out
+        run: |
+          f=$(ls turnip_workdir/xamonxx_naga8gen5V0.1*.zip | head -1)
+          echo "zip=$f" >> "$GITHUB_OUTPUT"
+          sha256sum "$f" | tee -a "$GITHUB_STEP_SUMMARY"
+          unzip -p "$f" meta.json | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xamonxx_naga8gen5V0.1
+          path: ${{ steps.out.outputs.zip }}
+          if-no-files-found: error
+
+      - name: Publish release v0.1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          f='${{ steps.out.outputs.zip }}'
+          gh release delete v0.1 --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag 2>/dev/null || true
+          gh release create v0.1 "$f" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "xamonxx naga8gen5 V0.1" \
+            --notes "Turnip (Mesa) Vulkan driver for Snapdragon 8 Gen 5 / Adreno 829 (iQOO 15R). AdrenoTools zip for GameHub / Winlator. Perf build flavor: ${{ steps.perf.outcome == 'success' && 'perf (O3 + ThinLTO + Oryon)' || 'safe (fallback)' }}. NOT TESTED on device yet."
