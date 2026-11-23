@@ -18,7 +18,7 @@
 | `dist/` | Output lokal (tidak di-commit) |
 
 ## Build
-GitHub Actions: **Actions → Build xamonxx naga8gen5 driver → Run workflow**. The zip is published under **Releases → v0.1**.
+GitHub Actions: **Actions → Build xamonxx naga8gen5 driver → Run workflow**. Zips are published under **Releases** (latest: v0.2, variants balanced / turbo).
 
 Local build (Linux x86_64): `bash build_naga8gen5.sh`. Use `FLAVOR=safe` for the fallback build.
 
