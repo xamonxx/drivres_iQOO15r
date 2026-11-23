@@ -12,7 +12,7 @@
 |---|---|
 | `AGENTS.md` / `CLAUDE.md` | Aturan wajib untuk AI agent |
 | `memory/` | Memory persisten lintas sesi. Mulai dari `memory/MEMORY.md` |
-| `docs/` | `DEVICE_INFO.md` (audit HP), `BUILD.md`, `INSTALL_AND_TUNING.md`, `TESTING.md` |
+| `docs/` | `DEVICE_INFO.md` (audit HP), `BUILD.md`, `INSTALL_AND_TUNING.md`, `TESTING.md`, `COMMANDLINE.md` |
 | `build_naga8gen5.sh`, `patches/`, `.github/workflows/` | Build driver (CI) |
 | `tools/audit_driver.py` | Audit zip driver |
 | `dist/` | Output lokal (tidak di-commit) |
