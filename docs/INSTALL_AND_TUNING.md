@@ -24,3 +24,11 @@ Storage: GTA V ±95–110 GB, sisa HP ±27 GB (per 2026-11-23) → kosongkan dul
 - Monster Mode hanya bila perlu FPS maksimal (lebih panas).
 - Lepas casing, hindari main di bawah matahari / di kasur.
 - Jangan pakai "thermal mod"/root — dilarang di project ini.
+
+## Target 90 / 120 fps (V0.2+)
+FPS di atas 60 hanya mungkin bila **layar** juga di atas 60 Hz. Benchmark V0.1 menunjukkan `@ 60Hz`.
+1. HP: Settings → Display → Screen refresh rate → tertinggi (120/144 Hz). Di Game Space, set frame rate game ini ke 120/144.
+2. App GTA V: Target FPS → 90 atau 120 (atau Unlimited saat benchmark). V-Sync OFF untuk mengukur headroom.
+3. Driver: mulai `V0.2-balanced`; bila masih drop, coba `V0.2-turbo` (lebih panas).
+4. Bila 90 belum stabil: turunkan resolusi (1568×718 → ±1280×586), Graphics preset lebih rendah.
+5. Panas: 90–120 fps **pasti** lebih panas dari 60. Pakai bypass charging, lepas casing. Driver tidak bisa membuat 120 fps sekaligus adem.

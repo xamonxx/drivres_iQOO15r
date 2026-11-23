@@ -20,10 +20,23 @@ MIN_API=28
 # Mesa commit known to build cleanly with these patches (StevenMXZ CI run 2026-11-23).
 MESA_COMMIT="${MESA_COMMIT:-c5ef4bdfabf2e1a76d5e41ab8e5d75ddbc121275}"
 FLAVOR="${FLAVOR:-perf}"
-DRIVER_NAME="xamonxx naga8gen5 V0.1"
-PKG_VERSION="0.1"
-ZIP_NAME="xamonxx_naga8gen5V0.1.zip"
-[ "$FLAVOR" = "safe" ] && ZIP_NAME="xamonxx_naga8gen5V0.1-safe.zip"
+# VARIANT selects the compiled-in KGSL GPU frequency floor (patches/xamonxx/0001_kgsl_gpu_floor.py):
+#   base     -> 0   (no floor, same runtime behaviour as V0.1)
+#   balanced -> 60  (GPU never drops below ~60% of max clock while the game submits)
+#   turbo    -> 1   (KGSL_CONSTRAINT_PWR_MAX: max allowed clock; hottest)
+VARIANT="${VARIANT:-balanced}"
+case "$VARIANT" in
+    base)     GPU_FLOOR=0 ;;
+    balanced) GPU_FLOOR=60 ;;
+    turbo)    GPU_FLOOR=1 ;;
+    *) echo "Unknown VARIANT=$VARIANT (base|balanced|turbo)" >&2; exit 1 ;;
+esac
+VERSION="0.2"
+VARIANT_TITLE="$(echo "${VARIANT:0:1}" | tr a-z A-Z)${VARIANT:1}"
+DRIVER_NAME="xamonxx naga8gen5 V${VERSION} ${VARIANT_TITLE}"
+PKG_VERSION="${VERSION}-${VARIANT}"
+ZIP_NAME="xamonxx_naga8gen5V${VERSION}-${VARIANT}.zip"
+[ "$FLAVOR" = "safe" ] && ZIP_NAME="xamonxx_naga8gen5V${VERSION}-${VARIANT}-safe.zip"
 
 check_deps() {
     for dep in git meson ninja unzip curl flex bison zip glslangValidator python3; do
@@ -75,6 +88,10 @@ apply_unified_patches() {
         python3 -B "$REPO_ROOT/patches/$script"
     done
 
+    # xamonxx patches (must run after the upstream set)
+    python3 -B "$REPO_ROOT/patches/xamonxx/0001_kgsl_gpu_floor.py"
+    grep -Fq 'xamonxx_apply_gpu_floor' src/freedreno/vulkan/tu_knl_kgsl.cc || die "xamonxx GPU floor patch missing"
+
     grep -Fq 'U_GRALLOC_TYPE_AIMAPPER' src/util/u_gralloc/u_gralloc.h
     grep -Fq 'name="Adreno (TM) 829"' src/freedreno/common/freedreno_devices.py || die "Adreno 829 entry missing"
     grep -Fq '0x44030A00' src/freedreno/common/freedreno_devices.py || die "Adreno 829 KGSL chip id missing"
@@ -115,10 +132,11 @@ build_android() {
         ldopt="-flto=thin -Wl,-O2 -Wl,--gc-sections -Wl,--icf=safe"
         ndebug=true
     fi
-    log "FLAVOR=$FLAVOR  OPT='$opt'  LDOPT='$ldopt'"
+    local defs="-D__ANDROID__ -DXAMONXX_GPU_FLOOR=$GPU_FLOOR"
+    log "FLAVOR=$FLAVOR VARIANT=$VARIANT GPU_FLOOR=$GPU_FLOOR  OPT='$opt'  LDOPT='$ldopt'"
     export LDFLAGS="-fuse-ld=lld $ldopt"
-    export CFLAGS="-D__ANDROID__ $opt $warn"
-    export CXXFLAGS="-D__ANDROID__ $opt $warn"
+    export CFLAGS="$defs $opt $warn"
+    export CXXFLAGS="$defs $opt $warn"
 
     cat > android-aarch64.txt <<EOF
 [binaries]
@@ -184,6 +202,11 @@ package_driver() {
     archive="$WORKDIR/$ZIP_NAME"
     local tuning="O3 + ThinLTO + Oryon tuning"
     [ "$FLAVOR" = "safe" ] && tuning="safe release flags"
+    case "$GPU_FLOOR" in
+        0) tuning="$tuning, no GPU floor" ;;
+        1) tuning="$tuning, KGSL GPU floor = max clock" ;;
+        *) tuning="$tuning, KGSL GPU floor = ${GPU_FLOOR}% of max clock" ;;
+    esac
 
     python3 - "$output_dir/meta.json" "$DRIVER_NAME" "$PKG_VERSION" "$mesa_sha" "$header_version" "$MIN_API" "$tuning" <<'PYMETA'
 import json, sys
@@ -210,6 +233,7 @@ PYMETA
     # Android Vulkan HAL / AdrenoTools load the driver through the exported hw_module symbol "HMI".
     "$NDK/llvm-nm" -D --defined-only "$output_dir/libvulkan_freedreno.so" | grep -wE "HMI" || die "Android HAL entry point HMI missing"
     "$NDK/llvm-nm" -D --defined-only "$output_dir/libvulkan_freedreno.so" | grep -E "vk_icd" || true
+    grep -aq "xamonxx naga8gen5: KGSL" "$output_dir/libvulkan_freedreno.so" || die "GPU floor code not linked into the driver"
 }
 
 main() {

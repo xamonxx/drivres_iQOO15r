@@ -12,10 +12,17 @@ on:
 permissions:
   contents: write
 
+env:
+  VERSION: "0.2"
+
 jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [balanced, turbo]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -30,32 +37,46 @@ jobs:
       - name: Build (perf flavor)
         id: perf
         continue-on-error: true
-        run: FLAVOR=perf bash build_naga8gen5.sh
+        run: FLAVOR=perf VARIANT=${{ matrix.variant }} bash build_naga8gen5.sh
 
       - name: Build (safe flavor fallback)
         if: steps.perf.outcome == 'failure'
-        run: FLAVOR=safe bash build_naga8gen5.sh
+        run: FLAVOR=safe VARIANT=${{ matrix.variant }} bash build_naga8gen5.sh
 
       - name: Collect output
         id: out
         run: |
-          f=$(ls turnip_workdir/xamonxx_naga8gen5V0.1*.zip | head -1)
+          f=$(ls turnip_workdir/xamonxx_naga8gen5V${VERSION}-${{ matrix.variant }}*.zip | head -1)
           echo "zip=$f" >> "$GITHUB_OUTPUT"
+          echo "### ${{ matrix.variant }} (perf build: ${{ steps.perf.outcome }})" >> "$GITHUB_STEP_SUMMARY"
           sha256sum "$f" | tee -a "$GITHUB_STEP_SUMMARY"
           unzip -p "$f" meta.json | tee -a "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: xamonxx_naga8gen5V0.1
+          name: xamonxx_naga8gen5V${{ env.VERSION }}-${{ matrix.variant }}
           path: ${{ steps.out.outputs.zip }}
           if-no-files-found: error
 
-      - name: Publish release v0.1
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+
+      - name: Publish release v${{ env.VERSION }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          f='${{ steps.out.outputs.zip }}'
-          gh release delete v0.1 --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag 2>/dev/null || true
-          gh release create v0.1 "$f" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --title "xamonxx naga8gen5 V0.1" \
-            --notes "Turnip (Mesa) Vulkan driver for Snapdragon 8 Gen 5 / Adreno 829 (iQOO 15R). AdrenoTools zip for GameHub / Winlator. Perf build flavor: ${{ steps.perf.outcome == 'success' && 'perf (O3 + ThinLTO + Oryon)' || 'safe (fallback)' }}. NOT TESTED on device yet."
+          ls -l out
+          gh release delete "v${VERSION}" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "v${VERSION}" out/*.zip --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "xamonxx naga8gen5 V${VERSION}" \
+            --notes "Turnip (Mesa) Vulkan driver for Snapdragon 8 Gen 5 / Adreno 829 (iQOO 15R).
+          New in V${VERSION}: KGSL GPU frequency floor (power constraint) to reduce clock ramp stutter.
+          - balanced: GPU floor 60% of max clock
+          - turbo: GPU held at max allowed clock (hottest; thermal limits still apply)
+          Runtime override: XAMONXX_GPU_FLOOR=0..100|max. NOT TESTED on device yet."

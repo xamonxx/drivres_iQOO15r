@@ -10,14 +10,15 @@ Driver Vulkan Turnip custom **xamonxx naga8gen5** untuk iQOO 15R (Adreno 829, SD
 (dan game PC lain) jalan sebaik mungkin di GameHub/Winlator. Fokus owner: FPS lancar, suhu adem, grafis menyesuaikan.
 
 ## Status (2026-11-23)
-- **V0.1 RILIS**: CI run 45175125137 sukses (flavor perf: O3 + ThinLTO + oryon-1) → GitHub Release `v0.1`.
-- Zip lolos `tools/audit_driver.py` (PASS). Salinan di `dist/` dan `C:\Users\Administrator\Downloads\GTA5_Drivers\`.
-- CI run #1 (45173761924) gagal hanya karena cek simbol salah (`vk_icd*`) → diganti cek `HMI`.
-- Driver: **NOT TESTED** di HP — menunggu laporan owner.
+- **V0.1** (release `v0.1`): TESTED oleh owner di GTA V — ter-load, stabil, avg 60 fps **pada cap 60 / layar 60 Hz**,
+  min 8.8–28 fps (stutter). Detail: `test-results.md`.
+- **V0.2** (sedang dibangun): + patch `xamonxx/0001` KGSL GPU frequency floor, varian `balanced` (60%) & `turbo` (max).
+  Target owner: 90 fps (base) / 120 fps. NOT TESTED.
 
 ## Next steps
-1. Owner uji sesuai `docs/TESTING.md` (V0.1 vs V39) → catat di `test-results.md`.
-2. Berdasarkan hasil: V0.2 (mis. tambah patch AAA dari V39-Patched, atau mundur ke flavor safe bila crash).
+1. CI hijau → release `v0.2` → unduh ke `dist/` → `tools/audit_driver.py` (cek juga string `xamonxx naga8gen5: KGSL`).
+2. Owner set layar 120/144 Hz + Target FPS 120/Unlimited + V-Sync OFF, lalu benchmark: V0.1 vs V0.2-balanced vs V0.2-turbo.
+3. Dari hasil: pilih floor default; bila 90 belum tercapai → turunkan resolusi (mis. 1280×586) atau setting grafis.
 
 ## Lingkungan
 - PC owner Windows 11; virtualisasi BIOS mati → WSL2/Docker tidak jalan → build lewat GitHub Actions.

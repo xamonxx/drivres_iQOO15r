@@ -1,6 +1,6 @@
 # BUILD — xamonxx naga8gen5
 
-## Pin versi saat ini (V0.1)
+## Pin versi saat ini (V0.2)
 | Komponen | Nilai |
 |---|---|
 | Mesa | `c5ef4bdfabf2e1a76d5e41ab8e5d75ddbc121275` (gitlab.freedesktop.org/mesa/mesa) |
@@ -30,9 +30,22 @@ CI menjalankan `perf`; bila gagal otomatis `safe` (zip bersuffix `-safe`).
 Catatan: `-mcpu=oryon-1` = tuning Oryon generasi 1 (subset fitur Oryon V3, aman). SVE2/SME sengaja **tidak** diaktifkan
 paksa — gain untuk kode driver tidak terbukti, risiko crash ada.
 
+## Varian GPU floor (V0.2+, patch `patches/xamonxx/0001_kgsl_gpu_floor.py`)
+| VARIANT | `XAMONXX_GPU_FLOOR` | Efek | Zip |
+|---|---|---|---|
+| `base` | 0 | tanpa floor (= perilaku V0.1) | `xamonxx_naga8gen5V0.2-base.zip` (tidak dirilis default) |
+| `balanced` | 60 | clock GPU tidak turun di bawah ~60% max saat game submit | `xamonxx_naga8gen5V0.2-balanced.zip` |
+| `turbo` | 1 (PWR_MAX) | clock GPU di level maksimum yang diizinkan termal | `xamonxx_naga8gen5V0.2-turbo.zip` |
+
+Mekanisme: context KGSL dibuat dengan `KGSL_CONTEXT_PWR_CONSTRAINT`, lalu `IOCTL_KGSL_SETPROPERTY`
+`KGSL_PROP_PWR_CONSTRAINT` (`KGSL_CONSTRAINT_PWRLEVEL`). Kernel menerapkan per command batch dan
+membiarkannya kedaluwarsa saat game berhenti submit. Throttling termal tetap berlaku.
+Override runtime (Winlator env var / Mesa option): `XAMONXX_GPU_FLOOR=0..100|max`.
+Bila kernel menolak: log `xamonxx naga8gen5: KGSL rejected GPU floor ...` dan driver jalan tanpa floor.
+
 ## Cara build
-- **CI (disarankan):** GitHub → Actions → *Build xamonxx naga8gen5 driver* → Run workflow. Hasil: Release `v0.1` + artifact.
-- **Lokal (Linux x86_64 / WSL2):** `bash build_naga8gen5.sh` atau `FLAVOR=safe bash build_naga8gen5.sh`. Output: `turnip_workdir/xamonxx_naga8gen5V0.1.zip`.
+- **CI (disarankan):** GitHub → Actions → *Build xamonxx naga8gen5 driver* → Run workflow. Hasil: Release `v<VERSION>` + artifact per varian.
+- **Lokal (Linux x86_64 / WSL2):** `VARIANT=balanced bash build_naga8gen5.sh` (VARIANT=base|balanced|turbo, FLAVOR=perf|safe). Output: `turnip_workdir/xamonxx_naga8gen5V<VERSION>-<VARIANT>.zip`.
   PC owner saat ini: virtualisasi BIOS mati → WSL2/Docker tidak bisa → pakai CI.
 
 ## Checklist naik versi
