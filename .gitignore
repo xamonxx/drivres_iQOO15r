@@ -1,1 +1,3 @@
 turnip_workdir/
+dist/*
+!dist/.gitkeep

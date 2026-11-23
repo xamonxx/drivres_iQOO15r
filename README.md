@@ -7,6 +7,16 @@
 - Performance build flags: `-O3`, ThinLTO, `-mcpu=oryon-1` tuning, `NDEBUG` (assertions off), and lld `--gc-sections` / `--icf=safe`.
 - If the perf build fails, CI falls back to a "safe" build that uses the upstream release flags.
 
+## Project layout
+| Path | Isi |
+|---|---|
+| `AGENTS.md` / `CLAUDE.md` | Aturan wajib untuk AI agent |
+| `memory/` | Memory persisten lintas sesi. Mulai dari `memory/MEMORY.md` |
+| `docs/` | `DEVICE_INFO.md` (audit HP), `BUILD.md`, `INSTALL_AND_TUNING.md`, `TESTING.md` |
+| `build_naga8gen5.sh`, `patches/`, `.github/workflows/` | Build driver (CI) |
+| `tools/audit_driver.py` | Audit zip driver |
+| `dist/` | Output lokal (tidak di-commit) |
+
 ## Build
 GitHub Actions: **Actions → Build xamonxx naga8gen5 driver → Run workflow**. The zip is published under **Releases → v0.1**.
 

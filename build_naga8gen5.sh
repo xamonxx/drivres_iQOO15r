@@ -207,7 +207,9 @@ PYMETA
     unzip -tq "$archive"
     log "Built: $archive"
     "$NDK/llvm-readelf" -d "$output_dir/libvulkan_freedreno.so" | grep NEEDED || true
-    "$NDK/llvm-nm" -D --defined-only "$output_dir/libvulkan_freedreno.so" | grep -E "vk_icd|vkGetInstanceProcAddr" || die "Vulkan ICD entry points missing"
+    # Android Vulkan HAL / AdrenoTools load the driver through the exported hw_module symbol "HMI".
+    "$NDK/llvm-nm" -D --defined-only "$output_dir/libvulkan_freedreno.so" | grep -wE "HMI" || die "Android HAL entry point HMI missing"
+    "$NDK/llvm-nm" -D --defined-only "$output_dir/libvulkan_freedreno.so" | grep -E "vk_icd" || true
 }
 
 main() {
