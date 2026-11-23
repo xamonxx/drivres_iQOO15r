@@ -12,13 +12,12 @@ Driver Vulkan Turnip custom **xamonxx naga8gen5** untuk iQOO 15R (Adreno 829, SD
 ## Status (2026-11-23)
 - **V0.1** (release `v0.1`): TESTED oleh owner di GTA V — ter-load, stabil, avg 60 fps **pada cap 60 / layar 60 Hz**,
   min 8.8–28 fps (stutter). Detail: `test-results.md`.
-- **V0.2** (sedang dibangun): + patch `xamonxx/0001` KGSL GPU frequency floor, varian `balanced` (60%) & `turbo` (max).
+- **V0.2** (release `v0.2`, CI 45196163906, audit PASS, salinan di DownloadsGTA5_Drivers): + patch `xamonxx/0001` KGSL GPU frequency floor, varian `balanced` (60%) & `turbo` (max).
   Target owner: 90 fps (base) / 120 fps. NOT TESTED.
 
 ## Next steps
-1. CI hijau → release `v0.2` → unduh ke `dist/` → `tools/audit_driver.py` (cek juga string `xamonxx naga8gen5: KGSL`).
-2. Owner set layar 120/144 Hz + Target FPS 120/Unlimited + V-Sync OFF, lalu benchmark: V0.1 vs V0.2-balanced vs V0.2-turbo.
-3. Dari hasil: pilih floor default; bila 90 belum tercapai → turunkan resolusi (mis. 1280×586) atau setting grafis.
+1. Owner set layar 120/144 Hz + Target FPS 120/Unlimited + V-Sync OFF, lalu benchmark: V0.1 vs V0.2-balanced vs V0.2-turbo.
+2. Dari hasil: pilih floor default; bila 90 belum tercapai → turunkan resolusi (mis. 1280×586) atau setting grafis.
 
 ## Lingkungan
 - PC owner Windows 11; virtualisasi BIOS mati → WSL2/Docker tidak jalan → build lewat GitHub Actions.
