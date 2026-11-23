@@ -10,15 +10,14 @@ Driver Vulkan Turnip custom **xamonxx naga8gen5** untuk iQOO 15R (Adreno 829, SD
 (dan game PC lain) jalan sebaik mungkin di GameHub/Winlator. Fokus owner: FPS lancar, suhu adem, grafis menyesuaikan.
 
 ## Status (2026-11-23)
-- V0.1: script build + patch A8xx StevenMXZ + flag perf (O3/ThinLTO/oryon-1) sudah di repo.
-- CI run #1 (45173761924): **compile perf & safe SUKSES**, tapi job gagal di cek simbol yang salah
-  (mencari `vk_icdGetInstanceProcAddr`; di Android yang benar `HMI`). Cek sudah diperbaiki → build ulang.
-- Driver: **NOT TESTED** di HP.
+- **V0.1 RILIS**: CI run 45175125137 sukses (flavor perf: O3 + ThinLTO + oryon-1) → GitHub Release `v0.1`.
+- Zip lolos `tools/audit_driver.py` (PASS). Salinan di `dist/` dan `C:\Users\Administrator\Downloads\GTA5_Drivers\`.
+- CI run #1 (45173761924) gagal hanya karena cek simbol salah (`vk_icd*`) → diganti cek `HMI`.
+- Driver: **NOT TESTED** di HP — menunggu laporan owner.
 
 ## Next steps
-1. Pastikan CI hijau → release `v0.1` → unduh ke `dist/` → `tools/audit_driver.py`.
-2. Owner uji sesuai `docs/TESTING.md` (V0.1 vs V39) → catat di `test-results.md`.
-3. Berdasarkan hasil: V0.2 (mis. tambah patch AAA dari V39-Patched, atau mundur ke flavor safe bila crash).
+1. Owner uji sesuai `docs/TESTING.md` (V0.1 vs V39) → catat di `test-results.md`.
+2. Berdasarkan hasil: V0.2 (mis. tambah patch AAA dari V39-Patched, atau mundur ke flavor safe bila crash).
 
 ## Lingkungan
 - PC owner Windows 11; virtualisasi BIOS mati → WSL2/Docker tidak jalan → build lewat GitHub Actions.
