@@ -14,7 +14,7 @@ Driver Vulkan Turnip custom **xamonxx naga8gen5** untuk iQOO 15R (Adreno 829, SD
   min 8.8–28 fps (stutter). Detail: `test-results.md`.
 - **V0.2** (release `v0.2`, CI 45196163906, audit PASS, salinan di `C:\Users\Administrator\Downloads\GTA5_Drivers\`): + patch `xamonxx/0001` KGSL GPU frequency floor, varian `balanced` (60%) & `turbo` (max).
   Target owner: 90 fps (base) / 120 fps. NOT TESTED.
-- **V0.3** (2026-11-24): 4 zip — `cool60`, `monster90`, `monster120`, `debug` (mode via `mode.txt` + log CSV).
+- **V0.3** (2026-11-24, release `v0.3`, CI 45427857301, audit PASS ×4, salinan di `dist/v0.3/`): 4 zip — `cool60`, `monster90`, `monster120`, `debug` (mode via `mode.txt` + log CSV).
   Fitur: FPS limiter, ADPF hint, GPU floor per mode, LOAD 16K-aligned, `tools/analyze_log.py`. NOT TESTED.
 
 ## Next steps
