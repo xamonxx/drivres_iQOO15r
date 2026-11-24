@@ -6,6 +6,10 @@
  *   - mode table (cool60 / monster90 / monster120) selected at compile time
  *     (-DXAMONXX_MODE_ID), by mode.txt (debug zip only) or by env vars;
  *   - FPS limiter: called once per present, sleeps to a fixed cadence;
+ *   - thermal guard (Monster modes): if the hottest CPU/GPU sensor stays above
+ *     95 °C the limiter steps down 15 fps (never below the mode minimum), and
+ *     steps back up after 30 s below 85 °C. Less work = less heat; it never
+ *     touches thermal limits, it only renders fewer frames;
  *   - ADPF (Android Performance Hint) session: a *hint* to the OS CPU scheduler,
  *     loaded with dlopen so the driver gains no new NEEDED library;
  *   - evaluation log (debug zip only): one CSV row per second written by a
@@ -55,14 +59,21 @@
 
 struct xamonxx_mode {
    const char *name;
-   int gpu_floor, fps_limit, adpf;
+   int gpu_floor, fps_limit, target_fps, fps_min, guard, adpf;
 };
 
+/* V0.4 (tuned from the owner's V0.3 debug logs, 2026-11-24):
+ *  - cool60: no driver limiter (the game's Target FPS 60 + V-Sync already pace it;
+ *    a second pacer caused 33 ms V-Sync misses), GPU floor 40 -> 60 %, plain ADPF
+ *    session (the power-efficient hint let CPU clocks sag to 0.5-0.9 GHz mid-game).
+ *  - monster90/120: unchanged floor/limit + thermal guard (GPU hit 104 °C, CPU 109 °C
+ *    within 2 minutes in monster120). */
 static const struct xamonxx_mode xamonxx_modes[] = {
-   /* id 0 */ { "base",       0,   0, 0 },
-   /* id 1 */ { "cool60",     40,  60, 2 },
-   /* id 2 */ { "monster90",  1,   90, 1 },
-   /* id 3 */ { "monster120", 1,  120, 1 },
+   /*            name          floor limit target min guard adpf */
+   /* id 0 */ { "base",         0,    0,    60,    0,  0,    0 },
+   /* id 1 */ { "cool60",       60,   0,    60,    0,  0,    1 },
+   /* id 2 */ { "monster90",    1,    90,   90,   60,  1,    1 },
+   /* id 3 */ { "monster120",   1,    120,  120,  90,  1,    1 },
 };
 #define XAMONXX_NUM_MODES ((int)(sizeof(xamonxx_modes) / sizeof(xamonxx_modes[0])))
 
@@ -70,6 +81,8 @@ static struct xamonxx_config cfg;
 static pthread_once_t cfg_once = PTHREAD_ONCE_INIT;
 static char log_dir[512];          /* empty = no writable folder found */
 static char mode_source[32] = "compiled";
+static atomic_int cur_limit;       /* limiter value in use (thermal guard may lower it) */
+static atomic_int guard_steps;     /* how many times the guard changed the limit */
 
 static uint64_t
 now_ns(void)
@@ -85,6 +98,9 @@ apply_mode(const struct xamonxx_mode *m)
    cfg.mode = m->name;
    cfg.gpu_floor = m->gpu_floor;
    cfg.fps_limit = m->fps_limit;
+   cfg.target_fps = m->target_fps;
+   cfg.fps_min = m->fps_min;
+   cfg.guard = m->guard;
    cfg.adpf = m->adpf;
 }
 
@@ -278,6 +294,11 @@ init_config(void)
    e = getenv("XAMONXX_FPS_LIMIT");
    if (e && *e) {
       cfg.fps_limit = clamp_int(atoi(e), 0, 240);
+      if (cfg.fps_limit) {
+         cfg.target_fps = cfg.fps_limit;
+         if (cfg.fps_min > cfg.fps_limit)
+            cfg.fps_min = cfg.fps_limit;
+      }
       snprintf(mode_source, sizeof(mode_source), "env");
    }
    e = getenv("XAMONXX_ADPF");
@@ -286,8 +307,12 @@ init_config(void)
       snprintf(mode_source, sizeof(mode_source), "env");
    }
 
-   mesa_logi(XLOG_PREFIX "mode %s (%s): gpu floor %d, fps limit %d, adpf %d, debug %d",
-             cfg.mode, mode_source, cfg.gpu_floor, cfg.fps_limit, cfg.adpf, cfg.debug);
+   if (cfg.target_fps <= 0)
+      cfg.target_fps = cfg.fps_limit ? cfg.fps_limit : 60;
+   atomic_store(&cur_limit, cfg.fps_limit);
+   mesa_logi(XLOG_PREFIX "mode %s (%s): gpu floor %d, fps limit %d (min %d, guard %d), "
+             "target %d, adpf %d, debug %d", cfg.mode, mode_source, cfg.gpu_floor,
+             cfg.fps_limit, cfg.fps_min, cfg.guard, cfg.target_fps, cfg.adpf, cfg.debug);
 }
 
 const struct xamonxx_config *
@@ -320,8 +345,10 @@ typedef APerformanceHintSession *(*pfn_create_session)(APerformanceHintManager *
                                                        const int32_t *, size_t, int64_t);
 typedef int (*pfn_report_work)(APerformanceHintSession *, int64_t);
 typedef int (*pfn_prefer_power)(APerformanceHintSession *, bool);
+typedef int (*pfn_update_target)(APerformanceHintSession *, int64_t);
 
 static pfn_report_work adpf_report;
+static pfn_update_target adpf_update_target;
 static _Atomic(APerformanceHintSession *) adpf_session;
 static atomic_bool adpf_started;
 /* 0 = not started, 1 = ok, 2 = ok + power-efficient, -1 = unavailable */
@@ -345,6 +372,7 @@ adpf_thread(void *data)
    pfn_create_session create = lib ? (pfn_create_session)dlsym(lib, "APerformanceHint_createSession") : NULL;
    pfn_report_work report = lib ? (pfn_report_work)dlsym(lib, "APerformanceHint_reportActualWorkDuration") : NULL;
    pfn_prefer_power prefer_power = lib ? (pfn_prefer_power)dlsym(lib, "APerformanceHint_setPreferPowerEfficiency") : NULL;
+   pfn_update_target update_target = lib ? (pfn_update_target)dlsym(lib, "APerformanceHint_updateTargetWorkDuration") : NULL;
 
    APerformanceHintManager *mgr = get_manager ? get_manager() : NULL;
    APerformanceHintSession *s = (mgr && create && report) ? create(mgr, &a.tid, 1, a.target_ns) : NULL;
@@ -359,6 +387,7 @@ adpf_thread(void *data)
       state = 2;
 
    adpf_report = report;
+   adpf_update_target = update_target;
    atomic_store(&adpf_session, s);
    atomic_store(&adpf_state, state);
    mesa_logi(XLOG_PREFIX "ADPF session ok (tid %d, target %lld ns%s)", (int)a.tid,
@@ -377,7 +406,7 @@ adpf_start_once(const struct xamonxx_config *c)
    if (!a)
       return;
    a->tid = (int32_t)gettid();
-   a->target_ns = 1000000000ll / (c->fps_limit ? c->fps_limit : 60);
+   a->target_ns = 1000000000ll / c->target_fps;
    a->mode = c->adpf;
 
    pthread_t t;
@@ -391,98 +420,13 @@ adpf_start_once(const struct xamonxx_config *c)
    pthread_attr_destroy(&attr);
 }
 
-/* ---- frame statistics + limiter ------------------------------------------- */
-
-static pthread_mutex_t present_lock = PTHREAD_MUTEX_INITIALIZER;
-static uint64_t next_deadline;  /* limiter cadence */
-static uint64_t last_present;   /* timestamp of previous paced present */
-
-struct frame_stats {
-   uint64_t frames;
-   uint64_t sum_ns;
-   uint64_t max_ns;
-   uint64_t slow;      /* frames slower than 1.5x target */
-   uint64_t slept_ns;
-};
-static struct frame_stats stats;  /* protected by present_lock */
-
-#if XAMONXX_DEBUG
-static void start_logger_once(void);
-#endif
-
-void
-xamonxx_on_present(void)
-{
-   const struct xamonxx_config *c = xamonxx_get_config();
-
-   if (c->adpf)
-      adpf_start_once(c);
-#if XAMONXX_DEBUG
-   start_logger_once();
-#endif
-
-   const uint64_t target = 1000000000ull / (uint64_t)(c->fps_limit ? c->fps_limit : 60);
-   uint64_t slept = 0;
-
-   pthread_mutex_lock(&present_lock);
-   uint64_t now = now_ns();
-   if (c->fps_limit) {
-      if (next_deadline == 0) {
-         next_deadline = now + target;
-      } else {
-         if (now < next_deadline) {
-            struct timespec ts = {
-               .tv_sec = (time_t)(next_deadline / 1000000000ull),
-               .tv_nsec = (long)(next_deadline % 1000000000ull),
-            };
-            while (clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &ts, NULL) == EINTR)
-               ;
-            uint64_t woke = now_ns();
-            slept = woke - now;
-            now = woke;
-         }
-         /* Keep the cadence; if we are more than one frame late, restart it
-          * from now instead of bursting frames to catch up. */
-         if (now > next_deadline + target)
-            next_deadline = now + target;
-         else
-            next_deadline += target;
-      }
-   }
-
-   uint64_t interval = last_present ? now - last_present : 0;
-   last_present = now;
-   if (interval) {
-      stats.frames++;
-      stats.sum_ns += interval;
-      if (interval > stats.max_ns)
-         stats.max_ns = interval;
-      if (interval * 2 > target * 3)
-         stats.slow++;
-      stats.slept_ns += slept;
-   }
-   pthread_mutex_unlock(&present_lock);
-
-   APerformanceHintSession *s = atomic_load(&adpf_session);
-   if (s && interval > slept) {
-      int64_t work = (int64_t)(interval - slept);
-      if (work > 0 && work < 1000000000ll)
-         adpf_report(s, work);
-   }
-}
-
-/* ---- evaluation log (debug zip) -------------------------------------------- */
-
-#if XAMONXX_DEBUG
+/* ---- thermal sensors (read-only, found by name) ---------------------------- */
 
 #define MAX_ZONES 48
-#define LOG_MAX_BYTES (5l * 1024 * 1024)
-#define LOG_KEEP 20
 
 static int zone_skin = -1, zone_batt = -1;
 static int zones_gpu[MAX_ZONES], n_gpu;
 static int zones_cpu[MAX_ZONES], n_cpu;
-static atomic_bool logger_started;
 
 static bool
 read_small(const char *path, char *buf, size_t size)
@@ -514,7 +458,7 @@ read_long(const char *path, long *out)
 }
 
 static void
-discover_zones(void)
+discover_zones_impl(void)
 {
    int skin_shell = -1, skin_sys = -1;
    for (int i = 0; i < 200; i++) {
@@ -563,6 +507,182 @@ zones_max_dc(const int *zones, int n)
    return best;
 }
 
+static pthread_once_t zones_once = PTHREAD_ONCE_INIT;
+
+static void
+discover_zones(void)
+{
+   pthread_once(&zones_once, discover_zones_impl);
+}
+
+/* ---- frame statistics + limiter ------------------------------------------- */
+
+static pthread_mutex_t present_lock = PTHREAD_MUTEX_INITIALIZER;
+static uint64_t next_deadline;  /* limiter cadence */
+static uint64_t last_present;   /* timestamp of previous paced present */
+
+struct frame_stats {
+   uint64_t frames;
+   uint64_t sum_ns;
+   uint64_t max_ns;
+   uint64_t slow;      /* frames slower than 1.5x target */
+   uint64_t slept_ns;
+};
+static struct frame_stats stats;  /* protected by present_lock */
+
+#if XAMONXX_DEBUG
+static void start_logger_once(void);
+#endif
+
+/* ---- thermal guard (Monster modes) ----------------------------------------- */
+
+#define GUARD_HOT_DC   950  /* 95.0 C: step the limit down */
+#define GUARD_COOL_DC  850  /* 85.0 C: allowed to step back up */
+#define GUARD_STEP_FPS 15
+
+static atomic_bool guard_started;
+
+static void
+guard_set_limit(int limit, int temp_dc)
+{
+   int old = atomic_exchange(&cur_limit, limit);
+   atomic_fetch_add(&guard_steps, 1);
+   mesa_logi(XLOG_PREFIX "thermal guard: %d.%d C -> fps limit %d -> %d", temp_dc / 10,
+             temp_dc % 10, old, limit);
+   APerformanceHintSession *s = atomic_load(&adpf_session);
+   if (s && adpf_update_target)
+      adpf_update_target(s, 1000000000ll / limit);
+}
+
+/* Every 2 s: hottest CPU/GPU sensor >= 95 C twice in a row -> limit -15 fps
+ * (not below fps_min); <= 85 C for 30 s -> limit +15 fps (not above fps_limit). */
+static void *
+guard_thread(void *unused)
+{
+   (void)unused;
+   discover_zones();
+   int hot = 0, cool = 0;
+   for (;;) {
+      struct timespec two_s = { .tv_sec = 2, .tv_nsec = 0 };
+      while (nanosleep(&two_s, &two_s) == -1 && errno == EINTR)
+         ;
+      int g = zones_max_dc(zones_gpu, n_gpu);
+      int p = zones_max_dc(zones_cpu, n_cpu);
+      int t = g > p ? g : p;
+      if (t == INT32_MIN)
+         continue;
+      int lim = atomic_load(&cur_limit);
+      if (t >= GUARD_HOT_DC) {
+         cool = 0;
+         if (++hot >= 2 && lim > cfg.fps_min) {
+            int n = lim - GUARD_STEP_FPS;
+            guard_set_limit(n < cfg.fps_min ? cfg.fps_min : n, t);
+            hot = 0;
+         }
+      } else if (t <= GUARD_COOL_DC) {
+         hot = 0;
+         if (++cool >= 15 && lim < cfg.fps_limit) {
+            int n = lim + GUARD_STEP_FPS;
+            guard_set_limit(n > cfg.fps_limit ? cfg.fps_limit : n, t);
+            cool = 0;
+         }
+      } else {
+         hot = 0;
+         cool = 0;
+      }
+   }
+   return NULL;
+}
+
+static void
+guard_start_once(void)
+{
+   bool expected = false;
+   if (!atomic_compare_exchange_strong(&guard_started, &expected, true))
+      return;
+   pthread_t t;
+   pthread_attr_t attr;
+   pthread_attr_init(&attr);
+   pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+   if (pthread_create(&t, &attr, guard_thread, NULL) != 0)
+      mesa_logw(XLOG_PREFIX "cannot start thermal guard");
+   pthread_attr_destroy(&attr);
+}
+
+void
+xamonxx_on_present(void)
+{
+   const struct xamonxx_config *c = xamonxx_get_config();
+
+   if (c->adpf)
+      adpf_start_once(c);
+   if (c->guard && c->fps_limit)
+      guard_start_once();
+#if XAMONXX_DEBUG
+   start_logger_once();
+#endif
+
+   const uint64_t target = 1000000000ull / (uint64_t)c->target_fps;
+   const int limit = atomic_load(&cur_limit);
+   const uint64_t period = limit > 0 ? 1000000000ull / (uint64_t)limit : 0;
+   uint64_t slept = 0;
+
+   pthread_mutex_lock(&present_lock);
+   uint64_t now = now_ns();
+   if (period) {
+      if (next_deadline == 0) {
+         next_deadline = now + period;
+      } else {
+         if (now < next_deadline) {
+            struct timespec ts = {
+               .tv_sec = (time_t)(next_deadline / 1000000000ull),
+               .tv_nsec = (long)(next_deadline % 1000000000ull),
+            };
+            while (clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &ts, NULL) == EINTR)
+               ;
+            uint64_t woke = now_ns();
+            slept = woke - now;
+            now = woke;
+         }
+         /* Keep the cadence; if we are more than one frame late, restart it
+          * from now instead of bursting frames to catch up. */
+         if (now > next_deadline + period)
+            next_deadline = now + period;
+         else
+            next_deadline += period;
+      }
+   }
+
+   uint64_t interval = last_present ? now - last_present : 0;
+   last_present = now;
+   if (interval) {
+      stats.frames++;
+      stats.sum_ns += interval;
+      if (interval > stats.max_ns)
+         stats.max_ns = interval;
+      if (interval * 2 > target * 3)
+         stats.slow++;
+      stats.slept_ns += slept;
+   }
+   pthread_mutex_unlock(&present_lock);
+
+   APerformanceHintSession *s = atomic_load(&adpf_session);
+   if (s && interval > slept) {
+      int64_t work = (int64_t)(interval - slept);
+      if (work > 0 && work < 1000000000ll)
+         adpf_report(s, work);
+   }
+}
+
+/* ---- evaluation log (debug zip) -------------------------------------------- */
+
+#if XAMONXX_DEBUG
+
+#define LOG_MAX_BYTES (5l * 1024 * 1024)
+#define LOG_KEEP 20
+
+static atomic_bool logger_started;
+
 static void
 fmt_dc(char *out, size_t size, int dc)
 {
@@ -596,22 +716,46 @@ gpu_busy_pct(long *out)
          return true;
       }
    }
+   if (read_small("/sys/kernel/gpu/gpu_busy", buf, sizeof(buf))) {
+      *out = strtol(buf, NULL, 10);
+      return true;
+   }
    return false;
+}
+
+/* Value in Hz or MHz (auto-detected) -> MHz. */
+static bool
+read_mhz(const char *path, long *out)
+{
+   long v;
+   if (!read_long(path, &v) || v <= 0)
+      return false;
+   *out = v > 100000 ? v / 1000000 : v;
+   return true;
 }
 
 static bool
 gpu_freq_mhz(long *out)
 {
-   long hz;
-   if (read_long("/sys/class/kgsl/kgsl-3d0/gpuclk", &hz) && hz > 0) {
-      *out = hz / 1000000;
-      return true;
-   }
-   if (read_long("/sys/class/kgsl/kgsl-3d0/devfreq/cur_freq", &hz) && hz > 0) {
-      *out = hz / 1000000;
-      return true;
-   }
-   return false;
+   return read_mhz("/sys/class/kgsl/kgsl-3d0/gpuclk", out) ||
+          read_mhz("/sys/class/kgsl/kgsl-3d0/clock_mhz", out) ||
+          read_mhz("/sys/kernel/gpu/gpu_clock", out) ||
+          read_mhz("/sys/class/kgsl/kgsl-3d0/devfreq/cur_freq", out);
+}
+
+/* Highest GPU clock currently allowed (drops when thermal mitigation caps the GPU). */
+static bool
+gpu_max_mhz(long *out)
+{
+   return read_mhz("/sys/class/kgsl/kgsl-3d0/max_gpuclk", out) ||
+          read_mhz("/sys/kernel/gpu/gpu_max_clock", out) ||
+          read_mhz("/sys/class/kgsl/kgsl-3d0/devfreq/max_freq", out);
+}
+
+static bool
+gpu_thermal_level(long *out)
+{
+   return read_long("/sys/class/kgsl/kgsl-3d0/thermal_pwrlevel", out);
 }
 
 static bool
@@ -705,8 +849,9 @@ open_log(void)
             proc[i] = ' ';
    }
    fprintf(f, "# xamonxx naga8gen5 %s debug log\n", XAMONXX_VERSION);
-   fprintf(f, "# mode=%s source=%s gpu_floor=%d fps_limit=%d adpf=%d\n", cfg.mode,
-           mode_source, cfg.gpu_floor, cfg.fps_limit, cfg.adpf);
+   fprintf(f, "# mode=%s source=%s gpu_floor=%d fps_limit=%d target_fps=%d fps_min=%d guard=%d adpf=%d\n",
+           cfg.mode, mode_source, cfg.gpu_floor, cfg.fps_limit, cfg.target_fps, cfg.fps_min,
+           cfg.guard, cfg.adpf);
    fprintf(f, "# process=%s\n", proc);
    fprintf(f, "# gpu_floor_kgsl: level=%d status=%s errno=%d\n",
            atomic_load(&floor_level_reported), floor_status(), atomic_load(&floor_err));
@@ -714,7 +859,8 @@ open_log(void)
    fprintf(f, "# slow_frames = frames longer than 1.5x the target frame time\n");
    fprintf(f, "t_s,fps,frametime_avg_ms,frametime_max_ms,slow_frames,limiter_sleep_ms,"
               "gpu_busy_pct,gpu_freq_mhz,cpu0_mhz,cpu6_mhz,temp_skin_c,temp_gpu_max_c,"
-              "temp_cpu_max_c,temp_batt_c,gpu_floor_status,adpf_status\n");
+              "temp_cpu_max_c,temp_batt_c,gpu_floor_status,adpf_status,gpu_max_mhz,"
+              "gpu_thermal_level,fps_limit_now,guard_steps\n");
    fflush(f);
    return f;
 }
@@ -747,14 +893,18 @@ logger_thread(void *unused)
       double avg_ms = s.frames ? (double)s.sum_ns / (double)s.frames / 1e6 : 0.0;
       double max_ms = (double)s.max_ns / 1e6;
 
-      long busy = 0, gfreq = 0, c0 = 0, c6 = 0;
+      long busy = 0, gfreq = 0, gmax = 0, glvl = 0, c0 = 0, c6 = 0;
       bool busy_ok = gpu_busy_pct(&busy);
       bool gfreq_ok = gpu_freq_mhz(&gfreq);
+      bool gmax_ok = gpu_max_mhz(&gmax);
+      bool glvl_ok = gpu_thermal_level(&glvl);
       bool c0_ok = cpu_freq_mhz(0, &c0);
       bool c6_ok = cpu_freq_mhz(6, &c6);
-      char sb[16], sg[16], s0[16], s6[16], tskin[16], tgpu[16], tcpu[16], tbat[16];
+      char sb[16], sg[16], sgm[16], sgl[16], s0[16], s6[16], tskin[16], tgpu[16], tcpu[16], tbat[16];
       fmt_long(sb, sizeof(sb), busy_ok, busy);
       fmt_long(sg, sizeof(sg), gfreq_ok, gfreq);
+      fmt_long(sgm, sizeof(sgm), gmax_ok, gmax);
+      fmt_long(sgl, sizeof(sgl), glvl_ok, glvl);
       fmt_long(s0, sizeof(s0), c0_ok, c0);
       fmt_long(s6, sizeof(s6), c6_ok, c6);
       fmt_dc(tskin, sizeof(tskin), zone_temp_dc(zone_skin));
@@ -764,9 +914,10 @@ logger_thread(void *unused)
 
       double t_s = (double)(now - t0) / 1e9;
       if (f) {
-         fprintf(f, "%.1f,%.1f,%.2f,%.2f,%llu,%.1f,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n", t_s, fps,
-                 avg_ms, max_ms, (unsigned long long)s.slow, (double)s.slept_ns / 1e6, sb, sg,
-                 s0, s6, tskin, tgpu, tcpu, tbat, floor_status(), adpf_status());
+         fprintf(f, "%.1f,%.1f,%.2f,%.2f,%llu,%.1f,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%d,%d\n",
+                 t_s, fps, avg_ms, max_ms, (unsigned long long)s.slow, (double)s.slept_ns / 1e6,
+                 sb, sg, s0, s6, tskin, tgpu, tcpu, tbat, floor_status(), adpf_status(), sgm, sgl,
+                 atomic_load(&cur_limit), atomic_load(&guard_steps));
          fflush(f);
          if (ftell(f) > LOG_MAX_BYTES) {
             fprintf(f, "# log size limit reached, logging stopped\n");

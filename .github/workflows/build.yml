@@ -13,7 +13,7 @@ permissions:
   contents: write
 
 env:
-  VERSION: "0.3"
+  VERSION: "0.4"
 
 jobs:
   build:
@@ -76,10 +76,10 @@ jobs:
           gh release create "v${VERSION}" out/*.zip --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --title "xamonxx naga8gen5 V${VERSION}" \
             --notes "Turnip (Mesa) Vulkan driver for Snapdragon 8 Gen 5 / Adreno 829 (iQOO 15R), tuned for GTA V Legacy (DXVK).
-          V${VERSION} modes:
-          - cool60: 60 fps limiter, GPU floor 40% of max clock, ADPF power-efficient hint. Least wasted work = coolest of the set.
-          - monster90: 90 fps limiter, GPU at max allowed clock, ADPF boost hint. Use with Monster Mode + 120/144 Hz display.
-          - monster120: 120 fps limiter, GPU at max allowed clock, ADPF boost hint. Hottest.
-          - debug: mode read from Download/xamonxx/mode.txt (cool60|monster90|monster120) + 1 CSV row/s (fps, frame time, GPU busy/clock, CPU clock, temps) in the same folder.
+          V${VERSION} modes (tuned from the V0.3 debug logs):
+          - cool60: no driver limiter (use game Target FPS 60 + V-Sync ON), GPU floor 60% of max clock, ADPF session 16.7 ms.
+          - monster90: 90 fps limiter, GPU at max allowed clock, ADPF; thermal guard steps the limit down 15 fps (min 60) when CPU/GPU >= 95 C.
+          - monster120: 120 fps limiter, same as monster90 with guard minimum 90. Hottest.
+          - debug: mode read from Download/xamonxx/mode.txt (cool60|monster90|monster120) + 1 CSV row/s (fps, frame time, GPU busy/clock, CPU clock, temps, current limit) in the same folder.
           Limits: a driver cannot set CPU clocks or temperature; ADPF is only a hint to Android and may be unavailable in the game process; thermal throttling always applies.
           LOAD segments aligned to 16 KiB. NOT TESTED on device yet."

@@ -13,8 +13,11 @@ extern "C" {
 struct xamonxx_config {
    const char *mode;   /* "base", "cool60", "monster90", "monster120" */
    int gpu_floor;      /* 0 = off, 1 = KGSL PWR_MAX, 2..100 = % of max GPU clock */
-   int fps_limit;      /* 0 = off, otherwise frames per second */
-   int adpf;           /* 0 = off, 1 = boost session, 2 = power-efficient session */
+   int fps_limit;      /* driver FPS limiter: 0 = off, otherwise frames per second */
+   int target_fps;     /* frame-time target for ADPF + log statistics */
+   int fps_min;        /* lowest limit the thermal guard may step down to */
+   int guard;          /* 1 = thermal guard lowers the limit when the SoC runs hot */
+   int adpf;           /* 0 = off, 1 = session, 2 = power-efficient session */
    int debug;          /* 1 = evaluation log enabled (debug zip) */
 };
 

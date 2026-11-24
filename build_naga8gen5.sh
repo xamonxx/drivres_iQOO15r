@@ -21,11 +21,11 @@ MIN_API=28
 MESA_COMMIT="${MESA_COMMIT:-c5ef4bdfabf2e1a76d5e41ab8e5d75ddbc121275}"
 FLAVOR="${FLAVOR:-perf}"
 # VARIANT selects the compiled-in mode (patches/xamonxx/src/xamonxx.c mode table):
-#   variant     MODE_ID  GPU floor (0001)   FPS limit (0002)  ADPF hint (0002)
-#   base        0        off                off               off
-#   cool60      1        40% of max clock   60                power-efficient
-#   monster90   2        max clock          90                boost
-#   monster120  3        max clock          120               boost
+#   variant     MODE_ID  GPU floor (0001)   FPS limit (0002)          ADPF hint (0002)
+#   base        0        off                off                       off
+#   cool60      1        60% of max clock   off (game V-Sync paces)   session, target 16.7 ms
+#   monster90   2        max clock          90, thermal guard >= 60   session, target 11.1 ms
+#   monster120  3        max clock          120, thermal guard >= 90  session, target 8.3 ms
 #   debug       1*       mode.txt at runtime (cool60|monster90|monster120) + CSV evaluation log
 VARIANT="${VARIANT:-cool60}"
 DEBUG=0
@@ -37,7 +37,7 @@ case "$VARIANT" in
     debug)      MODE_ID=1; DEBUG=1 ;;
     *) echo "Unknown VARIANT=$VARIANT (base|cool60|monster90|monster120|debug)" >&2; exit 1 ;;
 esac
-VERSION="0.3"
+VERSION="0.4"
 case "$VARIANT" in
     cool60)     VARIANT_TITLE="Cool60" ;;
     monster90)  VARIANT_TITLE="Monster90" ;;
@@ -222,9 +222,9 @@ package_driver() {
     local tuning="O3 + ThinLTO + Oryon tuning"
     [ "$FLAVOR" = "safe" ] && tuning="safe release flags"
     case "$VARIANT" in
-        cool60)     tuning="$tuning, mode Cool60: 60 fps limit, GPU floor 40%, ADPF power-efficient" ;;
-        monster90)  tuning="$tuning, mode Monster90: 90 fps limit, GPU floor max clock, ADPF boost" ;;
-        monster120) tuning="$tuning, mode Monster120: 120 fps limit, GPU floor max clock, ADPF boost" ;;
+        cool60)     tuning="$tuning, mode Cool60: game V-Sync 60, GPU floor 60%, ADPF 16.7 ms" ;;
+        monster90)  tuning="$tuning, mode Monster90: 90 fps limit + thermal guard, GPU floor max clock, ADPF" ;;
+        monster120) tuning="$tuning, mode Monster120: 120 fps limit + thermal guard, GPU floor max clock, ADPF" ;;
         debug)      tuning="$tuning, DEBUG: mode from Download/xamonxx/mode.txt + CSV evaluation log" ;;
         *)          tuning="$tuning, base: no floor, no limit, no ADPF" ;;
     esac
@@ -256,6 +256,7 @@ PYMETA
     "$NDK/llvm-nm" -D --defined-only "$output_dir/libvulkan_freedreno.so" | grep -E "vk_icd" || true
     grep -aq "xamonxx naga8gen5: KGSL" "$output_dir/libvulkan_freedreno.so" || die "GPU floor code not linked into the driver"
     grep -aq "xamonxx naga8gen5: mode %s" "$output_dir/libvulkan_freedreno.so" || die "xamonxx runtime not linked into the driver"
+    grep -aq "thermal guard" "$output_dir/libvulkan_freedreno.so" || die "thermal guard not linked into the driver"
     if [ "$DEBUG" = 1 ]; then
         grep -aq "evaluation log" "$output_dir/libvulkan_freedreno.so" || die "debug logger not linked into the driver"
     fi

@@ -63,8 +63,15 @@ def summarise(path, warmup):
         return f"### {Path(path).name}\n- Tidak ada baris data (game belum present frame / log kosong).\n"
 
     limit = num(meta.get("fps_limit")) or 0
-    target = limit if limit > 0 else 60.0
-    steady = [r for r in rows if (num(r.get("t_s")) or 0) > warmup] or rows
+    target = num(meta.get("target_fps")) or (limit if limit > 0 else 60.0)
+
+    # Gameplay = from the first second the GPU is really working (loading screens run at
+    # ~2-5 % GPU busy) or after --warmup, whichever is later; drop the last 3 s (game exit).
+    t_game = next((num(r.get("t_s")) for r in rows if (num(r.get("gpu_busy_pct")) or 0) >= 30), None)
+    t_start = max(warmup, t_game or 0)
+    steady = [r for r in rows if (num(r.get("t_s")) or 0) >= t_start]
+    steady = steady[:-3] if len(steady) > 6 else steady
+    steady = steady or rows
 
     fps = col(steady, "fps")
     ft_max = col(steady, "frametime_max_ms")
@@ -78,16 +85,26 @@ def summarise(path, warmup):
     last = rows[-1]
     out.append(f"- Status runtime: GPU floor KGSL **{last.get('gpu_floor_status', '?')}**, "
                f"ADPF **{last.get('adpf_status', '?')}**")
-    out.append(f"- Durasi: {len(rows)} s total, dianalisis {len(steady)} s (warm-up {warmup} s dibuang)")
+    out.append(f"- Durasi: {len(rows)} s total; gameplay dianalisis {len(steady)} s "
+               f"(mulai t={t_start:.0f} s, loading/warm-up & 3 s terakhir dibuang)")
     out.append(f"- FPS: rata-rata **{fmt(mean(fps))}**, 1% terendah (per detik) {fmt(pct(fps, 1))}, "
                f"min {fmt(min(fps) if fps else None)}, max {fmt(max(fps) if fps else None)}")
     out.append(f"- Detik dengan fps ≥ 95% target ({target:.0f}): **{100 * ok_secs / len(fps):.1f}%**" if fps else "- Detik ≥ target: NA")
     out.append(f"- Frame time terburuk: {fmt(max(ft_max) if ft_max else None, 1, ' ms')}, p99 dari frame time maks per detik {fmt(pct(ft_max, 99), 1, ' ms')}; "
                f"frame lambat (>1.5× target): {int(slow)} ({fmt(slow / minutes if minutes else None, 1)}/menit)")
-    out.append(f"- GPU: busy rata-rata {fmt(mean(col(steady, 'gpu_busy_pct')), 0, '%')}, "
-               f"clock rata-rata {fmt(mean(col(steady, 'gpu_freq_mhz')), 0, ' MHz')}")
-    out.append(f"- CPU clock rata-rata: Performance (cpu0) {fmt(mean(col(steady, 'cpu0_mhz')), 0, ' MHz')}, "
-               f"Prime (cpu6) {fmt(mean(col(steady, 'cpu6_mhz')), 0, ' MHz')}")
+    if target <= 61:
+        vs = sum(1 for x in ft_max if 30 <= x < 40)
+        out.append(f"- Detik dengan frame 30–40 ms (tanda V-Sync miss / 1 frame tampil 2×): {vs} dari {len(ft_max)}")
+    busy = col(steady, "gpu_busy_pct")
+    out.append(f"- GPU: busy rata-rata {fmt(mean(busy), 0, '%')} (≥95% pada {sum(1 for x in busy if x >= 95)} dari {len(busy)} detik terbaca), "
+               f"clock rata-rata {fmt(mean(col(steady, 'gpu_freq_mhz')), 0, ' MHz')}, "
+               f"clock maks diizinkan {fmt(min(col(steady, 'gpu_max_mhz')) if col(steady, 'gpu_max_mhz') else None, 0, ' MHz')} (terendah)")
+    c0, c6 = col(steady, "cpu0_mhz"), col(steady, "cpu6_mhz")
+    out.append(f"- CPU clock: Performance (cpu0) rata {fmt(mean(c0), 0)} / maks {fmt(max(c0) if c0 else None, 0)} MHz (hardware 3322), "
+               f"Prime (cpu6) rata {fmt(mean(c6), 0)} / maks {fmt(max(c6) if c6 else None, 0)} MHz (hardware 3802)")
+    lim_now = col(steady, "fps_limit_now")
+    if lim_now:
+        out.append(f"- Thermal guard: batas fps terendah {min(lim_now):.0f}, langkah guard {int(max(col(steady, 'guard_steps') or [0]))}")
     for name, label in (("temp_skin_c", "Skin/shell"), ("temp_gpu_max_c", "GPU"),
                         ("temp_cpu_max_c", "CPU"), ("temp_batt_c", "Baterai")):
         t = col(rows, name)
