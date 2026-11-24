@@ -63,16 +63,20 @@ struct xamonxx_mode {
 };
 
 /* V0.4 (tuned from the owner's V0.3 debug logs, 2026-11-24):
- *  - cool60: no driver limiter (the game's Target FPS 60 + V-Sync already pace it;
- *    a second pacer caused 33 ms V-Sync misses), GPU floor 40 -> 60 %, plain ADPF
- *    session (the power-efficient hint let CPU clocks sag to 0.5-0.9 GHz mid-game).
- *  - monster90/120: unchanged floor/limit + thermal guard (GPU hit 104 °C, CPU 109 °C
- *    within 2 minutes in monster120). */
+ *  - cool60: no pacing limiter (the game's Target FPS 60 + V-Sync already pace it;
+ *    a second pacer at 60 caused 33 ms V-Sync misses), GPU floor 40 -> 60 %, plain
+ *    ADPF session (the power-efficient hint let CPU clocks sag to 0.5-0.9 GHz).
+ *  - monster90/120: thermal guard (GPU hit 104 °C, CPU 109 °C in 2 minutes).
+ * V0.5 (V0.4 logs):
+ *  - cool60: safety cap 63 fps. With the game locked at 60 frames arrive every
+ *    >= 16.67 ms > 15.87 ms, so the cap never sleeps (no double pacing); with the
+ *    game set to Unlimited it stops the 93 fps / GPU 98 °C case seen in the log.
+ *  - monster90: guard minimum 60 -> 75 (the guard no longer reacts to CPU spikes). */
 static const struct xamonxx_mode xamonxx_modes[] = {
    /*            name          floor limit target min guard adpf */
    /* id 0 */ { "base",         0,    0,    60,    0,  0,    0 },
-   /* id 1 */ { "cool60",       60,   0,    60,    0,  0,    1 },
-   /* id 2 */ { "monster90",    1,    90,   90,   60,  1,    1 },
+   /* id 1 */ { "cool60",       60,   63,   60,   63,  0,    1 },
+   /* id 2 */ { "monster90",    1,    90,   90,   75,  1,    1 },
    /* id 3 */ { "monster120",   1,    120,  120,  90,  1,    1 },
 };
 #define XAMONXX_NUM_MODES ((int)(sizeof(xamonxx_modes) / sizeof(xamonxx_modes[0])))
@@ -536,9 +540,15 @@ static void start_logger_once(void);
 
 /* ---- thermal guard (Monster modes) ----------------------------------------- */
 
-#define GUARD_HOT_DC   950  /* 95.0 C: step the limit down */
-#define GUARD_COOL_DC  850  /* 85.0 C: allowed to step back up */
-#define GUARD_STEP_FPS 15
+/* Thresholds apply to 3-sample (6 s) averages. GPU is the heat source; single CPU
+ * hot-spot sensors spike by 5-10 °C for a second, so the CPU threshold is higher. */
+#define GUARD_GPU_HOT_DC   920  /* 92.0 C average GPU: step the limit down */
+#define GUARD_CPU_HOT_DC   1000 /* 100.0 C average CPU: step the limit down */
+#define GUARD_GPU_COOL_DC  860  /* both at/below these for 20 s: step back up */
+#define GUARD_CPU_COOL_DC  920
+#define GUARD_AVG_N        3
+#define GUARD_COOL_SAMPLES 10
+#define GUARD_STEP_FPS     15
 
 static atomic_bool guard_started;
 
@@ -554,40 +564,59 @@ guard_set_limit(int limit, int temp_dc)
       adpf_update_target(s, 1000000000ll / limit);
 }
 
-/* Every 2 s: hottest CPU/GPU sensor >= 95 C twice in a row -> limit -15 fps
- * (not below fps_min); <= 85 C for 30 s -> limit +15 fps (not above fps_limit). */
+/* Every 2 s, on 6 s averages: GPU >= 92 C or CPU >= 100 C -> limit -15 fps (not
+ * below fps_min), then wait 3 fresh samples; GPU <= 86 C and CPU <= 92 C for 20 s
+ * -> limit +15 fps (not above fps_limit). Simulated on the owner's V0.3/V0.4 logs. */
 static void *
 guard_thread(void *unused)
 {
    (void)unused;
    discover_zones();
-   int hot = 0, cool = 0;
+   int gpu_hist[GUARD_AVG_N], cpu_hist[GUARD_AVG_N];
+   int n_hist = 0, wait = 0, cool = 0;
    for (;;) {
       struct timespec two_s = { .tv_sec = 2, .tv_nsec = 0 };
       while (nanosleep(&two_s, &two_s) == -1 && errno == EINTR)
          ;
       int g = zones_max_dc(zones_gpu, n_gpu);
       int p = zones_max_dc(zones_cpu, n_cpu);
-      int t = g > p ? g : p;
-      if (t == INT32_MIN)
+      if (g == INT32_MIN || p == INT32_MIN)
          continue;
+      memmove(gpu_hist + 1, gpu_hist, sizeof(int) * (GUARD_AVG_N - 1));
+      memmove(cpu_hist + 1, cpu_hist, sizeof(int) * (GUARD_AVG_N - 1));
+      gpu_hist[0] = g;
+      cpu_hist[0] = p;
+      if (n_hist < GUARD_AVG_N) {
+         n_hist++;
+         continue;
+      }
+      int ga = 0, ca = 0;
+      for (int i = 0; i < GUARD_AVG_N; i++) {
+         ga += gpu_hist[i];
+         ca += cpu_hist[i];
+      }
+      ga /= GUARD_AVG_N;
+      ca /= GUARD_AVG_N;
+      if (wait) {
+         wait--;
+         continue;
+      }
+
       int lim = atomic_load(&cur_limit);
-      if (t >= GUARD_HOT_DC) {
+      if (ga >= GUARD_GPU_HOT_DC || ca >= GUARD_CPU_HOT_DC) {
          cool = 0;
-         if (++hot >= 2 && lim > cfg.fps_min) {
+         if (lim > cfg.fps_min) {
             int n = lim - GUARD_STEP_FPS;
-            guard_set_limit(n < cfg.fps_min ? cfg.fps_min : n, t);
-            hot = 0;
+            guard_set_limit(n < cfg.fps_min ? cfg.fps_min : n, ga > ca ? ga : ca);
+            wait = GUARD_AVG_N;
          }
-      } else if (t <= GUARD_COOL_DC) {
-         hot = 0;
-         if (++cool >= 15 && lim < cfg.fps_limit) {
+      } else if (ga <= GUARD_GPU_COOL_DC && ca <= GUARD_CPU_COOL_DC) {
+         if (++cool >= GUARD_COOL_SAMPLES && lim < cfg.fps_limit) {
             int n = lim + GUARD_STEP_FPS;
-            guard_set_limit(n > cfg.fps_limit ? cfg.fps_limit : n, t);
+            guard_set_limit(n > cfg.fps_limit ? cfg.fps_limit : n, ga > ca ? ga : ca);
             cool = 0;
          }
       } else {
-         hot = 0;
          cool = 0;
       }
    }

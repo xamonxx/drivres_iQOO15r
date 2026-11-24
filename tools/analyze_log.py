@@ -71,7 +71,10 @@ def summarise(path, warmup):
     t_start = max(warmup, t_game or 0)
     steady = [r for r in rows if (num(r.get("t_s")) or 0) >= t_start]
     steady = steady[:-3] if len(steady) > 6 else steady
-    steady = steady or rows
+    # Seconds with almost no presents = game in the background (e.g. owner switched to the
+    # file manager to edit mode.txt); they are not gameplay.
+    bg = sum(1 for r in steady if (num(r.get("fps")) or 0) < 5)
+    steady = [r for r in steady if (num(r.get("fps")) or 0) >= 5] or steady or rows
 
     fps = col(steady, "fps")
     ft_max = col(steady, "frametime_max_ms")
@@ -86,7 +89,8 @@ def summarise(path, warmup):
     out.append(f"- Status runtime: GPU floor KGSL **{last.get('gpu_floor_status', '?')}**, "
                f"ADPF **{last.get('adpf_status', '?')}**")
     out.append(f"- Durasi: {len(rows)} s total; gameplay dianalisis {len(steady)} s "
-               f"(mulai t={t_start:.0f} s, loading/warm-up & 3 s terakhir dibuang)")
+               f"(mulai t={t_start:.0f} s, loading/warm-up & 3 s terakhir dibuang"
+               f"{f', {bg} s di background dibuang' if bg else ''})")
     out.append(f"- FPS: rata-rata **{fmt(mean(fps))}**, 1% terendah (per detik) {fmt(pct(fps, 1))}, "
                f"min {fmt(min(fps) if fps else None)}, max {fmt(max(fps) if fps else None)}")
     out.append(f"- Detik dengan fps ≥ 95% target ({target:.0f}): **{100 * ok_secs / len(fps):.1f}%**" if fps else "- Detik ≥ target: NA")
