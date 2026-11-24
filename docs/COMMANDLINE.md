@@ -10,12 +10,12 @@ Parameter ranges come from the official Rockstar list "Full list of command line
 `-fxaa 0-3`, `-anisotropicQualityLevel 0-16`, `-lodScale / -pedLodBias / -vehicleLodBias / -cityDensity 0.0-1.0`,
 `-noInGameDOF` (flag), `-fogVolumes` / `-particleShadows` (enable flags), `-frameLimit` (number of vsyncs — do not use).
 
-## Which profile for which driver (V0.3)
+## Which profile for which driver (V0.4)
 | Driver zip | Profile | Resolution (start) | Launcher Target FPS | V-Sync |
 |---|---|---|---|---|
-| `V0.3-cool60` | C — Cool60 sharp | 1568×718 | 60 | ON |
-| `V0.3-monster90` | A — 90 fps | 1568×718 | Unlimited (the driver caps at 90) | OFF |
-| `V0.3-monster120` | B — 120 fps | ±1280×586 | Unlimited (the driver caps at 120) | OFF |
+| `V0.4-cool60` | C — Cool60 sharp | 1568×718 | 60 (required: the driver has no limiter in Cool60) | ON (required) |
+| `V0.4-monster90` | A — 90 fps | ±1280×586 (the V0.3 Monster90 log was GPU-bound: 99% busy, ~57 fps; its resolution was not recorded) | Unlimited (the driver caps at 90) | OFF |
+| `V0.4-monster120` | B — 120 fps | ±1280×586 | Unlimited (the driver caps at 120) | OFF |
 
 "Not blurry" in practice: keep the resolution as high as the fps target allows, turn **in-game DOF off**
 (`-noInGameDOF`), keep **FXAA off** (FXAA softens the whole image), and raise **anisotropic filtering**

@@ -2,13 +2,15 @@
 
 Uji dilakukan owner di iQOO 15R. Agent hanya mencatat hasil ke `memory/test-results.md`.
 
-## Urutan uji V0.3 (pakai debug zip dulu)
-1. **Load test:** import `xamonxx_naga8gen5V0.3-debug.zip` → driver muncul sebagai `xamonxx naga8gen5 V0.3 Debug` tanpa error.
+## Urutan uji V0.4 (pakai debug zip dulu)
+1. **Load test:** import `xamonxx_naga8gen5V0.4-debug.zip` → driver muncul sebagai `xamonxx naga8gen5 V0.4 Debug` tanpa error.
 2. **Cek log:** jalankan game 1 menit → `Download/xamonxx/` berisi `mode.txt` + `log_*.csv`.
    Catat bila folder tidak muncul (izin storage launcher = UNKNOWN).
 3. **Sesi per mode (15 menit jalan-jalan kota di story mode):** set `mode.txt`, setting HP/launcher, dan profil command line sesuai
    tabel di `docs/INSTALL_AND_TUNING.md`:
-   - `cool60` → `monster90` → `monster120` (istirahatkan HP ±10 menit di antara sesi supaya suhu awal mirip).
+   - `cool60` → `monster90` → `monster120`. **Istirahatkan HP ±10 menit di antara sesi** (log V0.3: Monster120 mulai dengan
+     skin 42°C karena langsung setelah sesi sebelumnya → hasil tidak sebanding). Minimal 10 menit gameplay per mode.
+   - Catat **resolusi + profil command line** tiap sesi (log tidak bisa membacanya).
 4. Kirim semua CSV ke PC (`dist/logs/`, tidak di-commit) → `python -I tools/analyze_log.py dist/logs/*.csv`.
 5. Opsional: benchmark bawaan launcher (5 pass) dengan zip rilis sesuai mode, untuk dibandingkan dengan V0.2.
 
@@ -18,13 +20,16 @@ Baterai %, charging/bypass on/off, Monster Mode on/off, refresh rate layar, suhu
 ## Yang dibaca dari log
 - `gpu_floor_status`: `accepted` = KGSL menerima floor; `rejected` = floor tidak aktif (fps bisa lebih rendah dari harapan).
 - `adpf_status`: `ok` / `ok-power-efficient` = hint CPU aktif; `unavailable` = Android menolak di proses ini.
+- `fps_limit_now` / `guard_steps`: batas fps saat ini dan berapa kali thermal guard mengubahnya.
+- `gpu_freq_mhz` / `gpu_max_mhz` / `gpu_thermal_level`: clock GPU bila sysfs boleh dibaca (V0.3: `gpu_freq_mhz` selalu `NA`).
+- `cpu0_mhz` maks 2361 / `cpu6_mhz` maks 2476 = CPU sedang dibatasi OS (hardware 3322 / 3802).
 - Persentase detik ≥ 95% target dan frame lambat/menit = ukuran "stabil".
 - Tabel per 5 menit: apakah fps turun saat suhu naik (throttling).
 
 ## Template laporan (salin ke `memory/test-results.md`)
 ```markdown
-### YYYY-MM-DD — V0.3 <mode> — GTA V
-- Driver: xamonxx_naga8gen5V0.3-<debug|cool60|monster90|monster120>
+### YYYY-MM-DD — V0.4 <mode> — GTA V
+- Driver: xamonxx_naga8gen5V0.4-<debug|cool60|monster90|monster120>
 - Launcher: versi …, Target FPS …, V-Sync …, resolusi …, profil command line …
 - Kondisi: baterai …%, bypass …, Monster Mode …, layar … Hz, casing …, suhu ruangan …
 - Ringkasan analyze_log.py: (tempel di sini)
