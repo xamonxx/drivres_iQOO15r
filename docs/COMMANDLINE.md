@@ -10,12 +10,17 @@ Parameter ranges come from the official Rockstar list "Full list of command line
 `-fxaa 0-3`, `-anisotropicQualityLevel 0-16`, `-lodScale / -pedLodBias / -vehicleLodBias / -cityDensity 0.0-1.0`,
 `-noInGameDOF` (flag), `-fogVolumes` / `-particleShadows` (enable flags), `-frameLimit` (number of vsyncs — do not use).
 
-## Which profile for which driver (V0.4)
+## Which profile for which driver (V0.5)
 | Driver zip | Profile | Resolution (start) | Launcher Target FPS | V-Sync |
 |---|---|---|---|---|
-| `V0.4-cool60` | C — Cool60 sharp | 1568×718 | 60 (required: the driver has no limiter in Cool60) | ON (required) |
-| `V0.4-monster90` | A — 90 fps | ±1280×586 (the V0.3 Monster90 log was GPU-bound: 99% busy, ~57 fps; its resolution was not recorded) | Unlimited (the driver caps at 90) | OFF |
-| `V0.4-monster120` | B — 120 fps | ±1280×586 | Unlimited (the driver caps at 120) | OFF |
+| `V0.5-cool60` | C — Cool60 sharp | 1568×718 | 60 (required; the driver only has a 63 fps safety cap) | ON (required) |
+| `V0.5-monster90` | A — 90 fps | 1310×600 | **Unlimited** (the driver paces at 90; a game lock at 90 + the driver = double pacing) | OFF |
+| `V0.5-monster120` | B — 120 fps | 1280×586 → 1176×539 if it stays below 100 | **Unlimited** (the driver caps at 120) | OFF |
+
+Resolutions on the panel's own ratio (2750×1260 = 2.18:1), so nothing is stretched:
+1568×718 (57%) · 1440×660 (52%) · 1310×600 (48%) · 1280×586 (47%) · 1176×539 (43%).
+V0.4 logs (no command line, 1556×718 / 1310×600, mapping not recorded): Cool60 locked 60 = 59.2 fps avg with GPU 79% busy;
+Monster90 held 90 for ±20 s with GPU 73–95% busy; Monster120 best run 95.9 fps avg with GPU 98% busy (GPU-bound).
 
 "Not blurry" in practice: keep the resolution as high as the fps target allows, turn **in-game DOF off**
 (`-noInGameDOF`), keep **FXAA off** (FXAA softens the whole image), and raise **anisotropic filtering**

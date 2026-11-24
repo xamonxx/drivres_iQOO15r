@@ -1,6 +1,6 @@
 # BUILD — xamonxx naga8gen5
 
-## Pin versi saat ini (V0.4)
+## Pin versi saat ini (V0.5)
 | Komponen | Nilai |
 |---|---|
 | Mesa | `c5ef4bdfabf2e1a76d5e41ab8e5d75ddbc121275` (gitlab.freedesktop.org/mesa/mesa) |
@@ -30,13 +30,13 @@ CI menjalankan `perf`; bila gagal otomatis `safe` (zip bersuffix `-safe`).
 Catatan: `-mcpu=oryon-1` = tuning Oryon generasi 1 (subset fitur Oryon V3, aman). SVE2/SME sengaja **tidak** diaktifkan
 paksa — gain untuk kode driver tidak terbukti, risiko crash ada.
 
-## Varian mode (V0.4, patch `patches/xamonxx/0001` + `0002` + `src/xamonxx.{c,h}`)
+## Varian mode (V0.5, patch `patches/xamonxx/0001` + `0002` + `src/xamonxx.{c,h}`)
 | VARIANT | MODE_ID | GPU floor (KGSL) | Batas FPS | ADPF hint | Zip |
 |---|---|---|---|---|---|
-| `cool60` | 1 | 60% max clock | off (V-Sync game) | session 16.7 ms | `xamonxx_naga8gen5V0.4-cool60.zip` |
-| `monster90` | 2 | PWR_MAX | 90, guard min 60 | session 11.1 ms | `xamonxx_naga8gen5V0.4-monster90.zip` |
-| `monster120` | 3 | PWR_MAX | 120, guard min 90 | session 8.3 ms | `xamonxx_naga8gen5V0.4-monster120.zip` |
-| `debug` | 1 + `mode.txt` | sesuai mode | sesuai mode | sesuai mode | `xamonxx_naga8gen5V0.4-debug.zip` (+ log CSV) |
+| `cool60` | 1 | 60% max clock | 63 (cap pengaman; pacing oleh V-Sync game) | session 16.7 ms | `xamonxx_naga8gen5V0.5-cool60.zip` |
+| `monster90` | 2 | PWR_MAX | 90, guard min 75 | session 11.1 ms | `xamonxx_naga8gen5V0.5-monster90.zip` |
+| `monster120` | 3 | PWR_MAX | 120, guard min 90 | session 8.3 ms | `xamonxx_naga8gen5V0.5-monster120.zip` |
+| `debug` | 1 + `mode.txt` | sesuai mode | sesuai mode | sesuai mode | `xamonxx_naga8gen5V0.5-debug.zip` (+ log CSV) |
 | `base` | 0 | off | off | off | tidak dirilis |
 
 - **0001 (GPU floor):** context KGSL dibuat dengan `KGSL_CONTEXT_PWR_CONSTRAINT` + `IOCTL_KGSL_SETPROPERTY`
@@ -44,8 +44,8 @@ paksa — gain untuk kode driver tidak terbukti, risiko crash ada.
 - **0002 (runtime):** salin `xamonxx.{c,h}` ke `src/vulkan/runtime/`, tambah ke `vulkan_lite_runtime_files`, panggil
   `xamonxx_on_present()` di `vk_common_QueueSignalReleaseImageANDROID` (swapchain loader Android) dan `wsi_common_queue_present`.
   - Limiter: `clock_nanosleep(TIMER_ABSTIME)` ke deadline tetap; telat > 1 frame → cadence di-reset (tanpa burst).
-  - Thermal guard (V0.4, Monster): thread 2 s membaca zone `gpuss-*`/`cpu-0-*`/`cpu-1-*`; ≥95°C dua kali → limit −15 fps
-    (min `fps_min`), ≤85°C selama 30 s → +15 fps. ADPF target ikut disesuaikan (`updateTargetWorkDuration`).
+  - Thermal guard (Monster; V0.4, diperhalus V0.5): thread 2 s membaca zone `gpuss-*`/`cpu-0-*`/`cpu-1-*`, rata-rata 3 sampel (6 s);
+    GPU ≥92°C atau CPU ≥100°C → limit −15 fps (min `fps_min`) lalu tunggu 3 sampel baru; GPU ≤86°C dan CPU ≤92°C selama 20 s → +15 fps. ADPF target ikut disesuaikan (`updateTargetWorkDuration`).
   - ADPF: `dlopen("libandroid.so")` di thread terpisah → `APerformanceHint_createSession` untuk thread present,
     lapor durasi kerja tiap frame. Tidak menambah `NEEDED`. Gagal = log `ADPF unavailable`, driver jalan terus.
   - Debug (`-DXAMONXX_DEBUG=1`): folder `/sdcard/Download/xamonxx` → fallback `/data/data/<pkg>/files/xamonxx` →

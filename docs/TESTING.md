@@ -2,15 +2,17 @@
 
 Uji dilakukan owner di iQOO 15R. Agent hanya mencatat hasil ke `memory/test-results.md`.
 
-## Urutan uji V0.4 (pakai debug zip dulu)
-1. **Load test:** import `xamonxx_naga8gen5V0.4-debug.zip` → driver muncul sebagai `xamonxx naga8gen5 V0.4 Debug` tanpa error.
+## Urutan uji V0.5 (pakai debug zip dulu)
+1. **Load test:** import `xamonxx_naga8gen5V0.5-debug.zip` → driver muncul sebagai `xamonxx naga8gen5 V0.5 Debug` tanpa error.
 2. **Cek log:** jalankan game 1 menit → `Download/xamonxx/` berisi `mode.txt` + `log_*.csv`.
    Catat bila folder tidak muncul (izin storage launcher = UNKNOWN).
 3. **Sesi per mode (15 menit jalan-jalan kota di story mode):** set `mode.txt`, setting HP/launcher, dan profil command line sesuai
    tabel di `docs/INSTALL_AND_TUNING.md`:
    - `cool60` → `monster90` → `monster120`. **Istirahatkan HP ±10 menit di antara sesi** (log V0.3: Monster120 mulai dengan
      skin 42°C karena langsung setelah sesi sebelumnya → hasil tidak sebanding). Minimal 10 menit gameplay per mode.
-   - Catat **resolusi + profil command line** tiap sesi (log tidak bisa membacanya).
+   - Catat **resolusi + profil command line** tiap sesi (log tidak bisa membacanya) — paling mudah: tulis di nama file CSV.
+   - Ganti `mode.txt` **setelah menutup game** (keluar ke file manager saat game jalan = detik background di log).
+   - Uji di **tempat yang sama** di game (mis. jalan kaki di area yang sama) supaya antar mode sebanding.
 4. Kirim semua CSV ke PC (`dist/logs/`, tidak di-commit) → `python -I tools/analyze_log.py dist/logs/*.csv`.
 5. Opsional: benchmark bawaan launcher (5 pass) dengan zip rilis sesuai mode, untuk dibandingkan dengan V0.2.
 
@@ -28,8 +30,8 @@ Baterai %, charging/bypass on/off, Monster Mode on/off, refresh rate layar, suhu
 
 ## Template laporan (salin ke `memory/test-results.md`)
 ```markdown
-### YYYY-MM-DD — V0.4 <mode> — GTA V
-- Driver: xamonxx_naga8gen5V0.4-<debug|cool60|monster90|monster120>
+### YYYY-MM-DD — V0.5 <mode> — GTA V
+- Driver: xamonxx_naga8gen5V0.5-<debug|cool60|monster90|monster120>
 - Launcher: versi …, Target FPS …, V-Sync …, resolusi …, profil command line …
 - Kondisi: baterai …%, bypass …, Monster Mode …, layar … Hz, casing …, suhu ruangan …
 - Ringkasan analyze_log.py: (tempel di sini)
