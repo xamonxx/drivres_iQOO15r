@@ -2,7 +2,8 @@
 """xamonxx 0001 — KGSL GPU frequency floor (power constraint) for Turnip.
 
 Run from the Mesa source root AFTER the upstream StevenMXZ patches
-(needs kgsl_context_create() from a6xx/0002-kgsl-context-recovery.patch).
+(needs kgsl_context_create() from a6xx/0002-kgsl-context-recovery.patch)
+together with 0002_xamonxx_runtime.py (provides xamonxx.h).
 
 What it does
   Each KGSL draw context Turnip creates gets KGSL_CONTEXT_PWR_CONSTRAINT and a
@@ -14,10 +15,10 @@ What it does
   when the game stops submitting. Thermal mitigation still clamps the maximum level,
   so hardware/thermal protection is untouched.
 
-Default level is compiled in with -DXAMONXX_GPU_FLOOR=<n>; it can be overridden at
-runtime with the env var / Mesa option XAMONXX_GPU_FLOOR (number or "max").
-If the kernel rejects the request (older KGSL without PERC support), the driver logs a
-warning and continues without a floor.
+Since V0.3 the level comes from xamonxx_get_config() (mode compiled in with
+-DXAMONXX_MODE_ID, mode.txt in the debug zip, env XAMONXX_GPU_FLOOR=0..100|max).
+The ioctl result is reported back with xamonxx_report_gpu_floor() for the debug log.
+If the kernel rejects the request, the driver logs a warning and continues without a floor.
 """
 import sys
 from pathlib import Path
@@ -38,10 +39,6 @@ def must_replace(text, old, new, what):
 
 HELPERS = r'''
 /* ---- xamonxx naga8gen5: KGSL GPU frequency floor -------------------------- */
-#ifndef XAMONXX_GPU_FLOOR
-#define XAMONXX_GPU_FLOOR 0
-#endif
-
 static int
 xamonxx_gpu_floor_level(void)
 {
@@ -49,10 +46,7 @@ xamonxx_gpu_floor_level(void)
    if (cached >= 0)
       return cached;
 
-   int level = XAMONXX_GPU_FLOOR;
-   const char *opt = os_get_option("XAMONXX_GPU_FLOOR");
-   if (opt && *opt)
-      level = !strcmp(opt, "max") ? KGSL_CONSTRAINT_PWR_MAX : atoi(opt);
+   int level = xamonxx_get_config()->gpu_floor;
    if (level < 0 || level > KGSL_CONSTRAINT_PWR_PERC_MAX)
       level = 0;
 
@@ -84,9 +78,12 @@ xamonxx_apply_gpu_floor(int fd, uint32_t context_id, int level)
       .sizebytes = sizeof(constraint),
    };
 
-   if (safe_ioctl(fd, IOCTL_KGSL_SETPROPERTY, &prop))
+   int ret = safe_ioctl(fd, IOCTL_KGSL_SETPROPERTY, &prop);
+   int err = ret ? errno : 0;
+   xamonxx_report_gpu_floor(level, ret == 0, err);
+   if (ret)
       mesa_logw("xamonxx naga8gen5: KGSL rejected GPU floor %d: %s", level,
-                strerror(errno));
+                strerror(err));
 }
 /* -------------------------------------------------------------------------- */
 
@@ -109,8 +106,9 @@ new_id = old_id + ("   xamonxx_apply_gpu_floor(dev->physical_device->local_fd,\n
                    "                           req.drawctxt_id, xamonxx_floor);\n")
 src = must_replace(src, old_id, new_id, "context id assignment")
 
-# 4) headers for atoi/strcmp
+# 4) headers for strerror + xamonxx config
 src = must_replace(src, "#include <stdint.h>\n", "#include <stdint.h>\n#include <stdlib.h>\n#include <string.h>\n", "stdint include")
+src = must_replace(src, '#include "tu_rmv.h"\n', '#include "tu_rmv.h"\n#include "xamonxx.h"\n', "tu_rmv include")
 
 path.write_bytes(src.encode("utf-8"))  # keep LF line endings on every host
-print("xamonxx gpu floor: applied (default level from XAMONXX_GPU_FLOOR macro)")
+print("xamonxx gpu floor: applied (level from xamonxx_get_config)")

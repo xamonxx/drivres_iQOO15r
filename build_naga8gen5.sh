@@ -20,19 +20,31 @@ MIN_API=28
 # Mesa commit known to build cleanly with these patches (StevenMXZ CI run 2026-11-23).
 MESA_COMMIT="${MESA_COMMIT:-c5ef4bdfabf2e1a76d5e41ab8e5d75ddbc121275}"
 FLAVOR="${FLAVOR:-perf}"
-# VARIANT selects the compiled-in KGSL GPU frequency floor (patches/xamonxx/0001_kgsl_gpu_floor.py):
-#   base     -> 0   (no floor, same runtime behaviour as V0.1)
-#   balanced -> 60  (GPU never drops below ~60% of max clock while the game submits)
-#   turbo    -> 1   (KGSL_CONSTRAINT_PWR_MAX: max allowed clock; hottest)
-VARIANT="${VARIANT:-balanced}"
+# VARIANT selects the compiled-in mode (patches/xamonxx/src/xamonxx.c mode table):
+#   variant     MODE_ID  GPU floor (0001)   FPS limit (0002)  ADPF hint (0002)
+#   base        0        off                off               off
+#   cool60      1        40% of max clock   60                power-efficient
+#   monster90   2        max clock          90                boost
+#   monster120  3        max clock          120               boost
+#   debug       1*       mode.txt at runtime (cool60|monster90|monster120) + CSV evaluation log
+VARIANT="${VARIANT:-cool60}"
+DEBUG=0
 case "$VARIANT" in
-    base)     GPU_FLOOR=0 ;;
-    balanced) GPU_FLOOR=60 ;;
-    turbo)    GPU_FLOOR=1 ;;
-    *) echo "Unknown VARIANT=$VARIANT (base|balanced|turbo)" >&2; exit 1 ;;
+    base)       MODE_ID=0 ;;
+    cool60)     MODE_ID=1 ;;
+    monster90)  MODE_ID=2 ;;
+    monster120) MODE_ID=3 ;;
+    debug)      MODE_ID=1; DEBUG=1 ;;
+    *) echo "Unknown VARIANT=$VARIANT (base|cool60|monster90|monster120|debug)" >&2; exit 1 ;;
 esac
-VERSION="0.2"
-VARIANT_TITLE="$(echo "${VARIANT:0:1}" | tr a-z A-Z)${VARIANT:1}"
+VERSION="0.3"
+case "$VARIANT" in
+    cool60)     VARIANT_TITLE="Cool60" ;;
+    monster90)  VARIANT_TITLE="Monster90" ;;
+    monster120) VARIANT_TITLE="Monster120" ;;
+    debug)      VARIANT_TITLE="Debug" ;;
+    *)          VARIANT_TITLE="Base" ;;
+esac
 DRIVER_NAME="xamonxx naga8gen5 V${VERSION} ${VARIANT_TITLE}"
 PKG_VERSION="${VERSION}-${VARIANT}"
 ZIP_NAME="xamonxx_naga8gen5V${VERSION}-${VARIANT}.zip"
@@ -89,8 +101,12 @@ apply_unified_patches() {
     done
 
     # xamonxx patches (must run after the upstream set)
+    XAMONXX_VERSION="$VERSION" python3 -B "$REPO_ROOT/patches/xamonxx/0002_xamonxx_runtime.py"
     python3 -B "$REPO_ROOT/patches/xamonxx/0001_kgsl_gpu_floor.py"
     grep -Fq 'xamonxx_apply_gpu_floor' src/freedreno/vulkan/tu_knl_kgsl.cc || die "xamonxx GPU floor patch missing"
+    grep -Fq 'xamonxx_on_present' src/vulkan/runtime/vk_android.c || die "xamonxx present hook (android) missing"
+    grep -Fq 'xamonxx_on_present' src/vulkan/wsi/wsi_common.c || die "xamonxx present hook (wsi) missing"
+    grep -Fq "'xamonxx.c'" src/vulkan/runtime/meson.build || die "xamonxx.c not in the build"
 
     grep -Fq 'U_GRALLOC_TYPE_AIMAPPER' src/util/u_gralloc/u_gralloc.h
     grep -Fq 'name="Adreno (TM) 829"' src/freedreno/common/freedreno_devices.py || die "Adreno 829 entry missing"
@@ -132,8 +148,11 @@ build_android() {
         ldopt="-flto=thin -Wl,-O2 -Wl,--gc-sections -Wl,--icf=safe"
         ndebug=true
     fi
-    local defs="-D__ANDROID__ -DXAMONXX_GPU_FLOOR=$GPU_FLOOR"
-    log "FLAVOR=$FLAVOR VARIANT=$VARIANT GPU_FLOOR=$GPU_FLOOR  OPT='$opt'  LDOPT='$ldopt'"
+    # Device reports ro.product.cpu.pagesize.max=16384: align LOAD segments to 16 KiB
+    # so the same .so also loads on a 16K-page kernel (harmless on today's 4K kernel).
+    ldopt="$ldopt -Wl,-z,max-page-size=16384"
+    local defs="-D__ANDROID__ -DXAMONXX_MODE_ID=$MODE_ID -DXAMONXX_DEBUG=$DEBUG"
+    log "FLAVOR=$FLAVOR VARIANT=$VARIANT MODE_ID=$MODE_ID DEBUG=$DEBUG  OPT='$opt'  LDOPT='$ldopt'"
     export LDFLAGS="-fuse-ld=lld $ldopt"
     export CFLAGS="$defs $opt $warn"
     export CXXFLAGS="$defs $opt $warn"
@@ -202,10 +221,12 @@ package_driver() {
     archive="$WORKDIR/$ZIP_NAME"
     local tuning="O3 + ThinLTO + Oryon tuning"
     [ "$FLAVOR" = "safe" ] && tuning="safe release flags"
-    case "$GPU_FLOOR" in
-        0) tuning="$tuning, no GPU floor" ;;
-        1) tuning="$tuning, KGSL GPU floor = max clock" ;;
-        *) tuning="$tuning, KGSL GPU floor = ${GPU_FLOOR}% of max clock" ;;
+    case "$VARIANT" in
+        cool60)     tuning="$tuning, mode Cool60: 60 fps limit, GPU floor 40%, ADPF power-efficient" ;;
+        monster90)  tuning="$tuning, mode Monster90: 90 fps limit, GPU floor max clock, ADPF boost" ;;
+        monster120) tuning="$tuning, mode Monster120: 120 fps limit, GPU floor max clock, ADPF boost" ;;
+        debug)      tuning="$tuning, DEBUG: mode from Download/xamonxx/mode.txt + CSV evaluation log" ;;
+        *)          tuning="$tuning, base: no floor, no limit, no ADPF" ;;
     esac
 
     python3 - "$output_dir/meta.json" "$DRIVER_NAME" "$PKG_VERSION" "$mesa_sha" "$header_version" "$MIN_API" "$tuning" <<'PYMETA'
@@ -234,6 +255,11 @@ PYMETA
     "$NDK/llvm-nm" -D --defined-only "$output_dir/libvulkan_freedreno.so" | grep -wE "HMI" || die "Android HAL entry point HMI missing"
     "$NDK/llvm-nm" -D --defined-only "$output_dir/libvulkan_freedreno.so" | grep -E "vk_icd" || true
     grep -aq "xamonxx naga8gen5: KGSL" "$output_dir/libvulkan_freedreno.so" || die "GPU floor code not linked into the driver"
+    grep -aq "xamonxx naga8gen5: mode %s" "$output_dir/libvulkan_freedreno.so" || die "xamonxx runtime not linked into the driver"
+    if [ "$DEBUG" = 1 ]; then
+        grep -aq "evaluation log" "$output_dir/libvulkan_freedreno.so" || die "debug logger not linked into the driver"
+    fi
+    "$NDK/llvm-readelf" -lW "$output_dir/libvulkan_freedreno.so" | awk '$1 == "LOAD" { print; if ($NF != "0x4000") bad = 1 } END { exit bad }'         || die "LOAD segments are not 16 KiB aligned"
 }
 
 main() {
