@@ -21,10 +21,14 @@ Driver Vulkan Turnip custom **xamonxx naga8gen5** untuk iQOO 15R (Adreno 829, SD
   Monster120 ±98 fps tapi GPU 104°C; CPU dibatasi OS 2.36/2.48 GHz. Detail `test-results.md`.
 - **V0.4** (2026-11-24, release `v0.4`, CI 45433961982, audit PASS ×4, salinan `dist/v0.4/`): Cool60 tanpa limiter + floor 60%, thermal guard Monster, logger GPU clock fallback. NOT TESTED.
 
+- **V0.4 TESTED (debug, 2026-11-24):** Cool60 locked 60 stabil (59.2 avg, V-Sync miss 2/98 s); Cool60 Unlimited panas;
+  Monster90 90 rata lalu guard terlalu agresif; Monster120 terbaik ±96 fps; CPU tetap dibatasi OS walau Monster Mode ON.
+- **V0.5** (2026-11-24): Cool60 cap pengaman 63, guard rata-rata 6 s berbasis GPU (min Monster90 75). NOT TESTED.
+
 ## Next steps
-1. Owner uji V0.4-debug: per mode ≥10 menit, jeda 10 menit, catat resolusi/profil; coba Game Space + Monster Mode.
-2. Cek di log: Cool60 → detik 30–40 ms harus jauh berkurang; Monster120 → `fps_limit_now` turun & suhu < 95°C;
-   `cpu0_mhz` > 2361 bila Monster Mode berhasil membuka batas.
+1. Owner uji V0.5-debug dengan profil rekomendasi (C 1568×718 / A 1310×600 / B 1280×586), game Unlimited untuk Monster,
+   tempat sama, ≥10 menit per mode, jeda 10 menit, ganti `mode.txt` setelah game ditutup, tulis resolusi di nama CSV.
+2. Dari log: Monster90 — berapa lama bertahan di 90 sebelum guard turun ke 75; Monster120 — apakah profil B + 1280×586 > 110 fps.
 
 ## Lingkungan
 - PC owner Windows 11; per 2026-11-24 `wsl -l` menunjukkan Ubuntu-24.04 (stopped, tanpa gcc) + docker-desktop (running),

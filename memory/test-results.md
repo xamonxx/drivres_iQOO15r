@@ -5,6 +5,23 @@ updated: 2026-11-24
 type: test
 ---
 
+### 2026-11-24 23:18–23:38 — V0.4-debug — GTA V, 6 sesi (tiap mode: Target FPS Unlimited vs locked)
+- Sumber: `resault_debug/v4debug/` (tidak di-commit). Tanpa command line; resolusi 1556×718 dan 1310×600 (pembagian per sesi
+  tidak diingat owner). Game Space + Monster Mode ON. Floor KGSL accepted, ADPF ok di semua sesi; clock GPU tetap NA.
+- Ekor fps 0 di monster90-locked = owner keluar ke file manager untuk edit `mode.txt` (bukan freeze).
+
+| Sesi | FPS avg | ≥95% target | GPU busy | GPU maks | CPU maks | Catatan |
+|---|---|---|---|---|---|---|
+| cool60 Unlimited | 92.8 | — | 97% | 97.8°C | 108.3°C | tanpa cap sama sekali → panas |
+| cool60 locked 60 | 59.2 | 94% | 79% | 75.2°C | 87.2°C | V-Sync miss 2/98 s (V0.3: 25/42) → **perbaikan V0.4 berhasil** |
+| monster90 Unlimited | 70.1 | 24% | 84% | 90.7°C | 101.6°C | 90 rata (ftmax 11.2 ms) ±20 s, guard 90→75→60 (t≈40/48 s) krn lonjakan CPU, macet di 60 |
+| monster90 locked 90 | 56.6* | 3% | 99% | 74.0°C | 83.3°C | game lock 90 + limiter 90 = double pacing, GPU-bound |
+| monster120 Unlimited | 72.6 | 0% | 99% | 70.5°C | 89.6°C | GPU 99% tapi dingin → scene/res berat (tidak tercatat) |
+| monster120 locked 120 | 95.9 | 3% | 98% | 84.1°C | 92.7°C | terbaik untuk Monster; 120 tidak tercapai (GPU-bound) |
+*setelah membuang 34 s di background.
+- CPU tetap 2361 / 2476 MHz walau Monster Mode ON → batas OriginOS untuk app ini.
+- Status V0.4: **TESTED (debug)**; tuning lanjut → V0.5.
+
 ### 2026-11-24 22:47–22:59 — V0.3-debug — GTA V, 3 sesi (cool60 → monster90 → monster120)
 - Sumber: `resault_debug/log_*.csv` dari owner (tidak di-commit). Launcher `com.thegwchr.fuzzy:game`.
 - Folder `Download/xamonxx/` + `mode.txt` + CSV **berhasil dibuat** (izin storage OK). GPU floor KGSL **accepted** di semua

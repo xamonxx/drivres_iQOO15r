@@ -5,6 +5,16 @@ updated: 2026-11-24
 type: decision
 ---
 
+### 2026-11-24 — V0.5: tuning dari log debug V0.4
+- **Cool60:** cap pengaman 63 fps (bukan pacing): saat game lock 60, frame datang tiap ≥16.67 ms > 15.87 ms → limiter tidak
+  pernah tidur; saat game Unlimited, menahan ±63 fps (log V0.4: 93 fps, GPU 98°C tanpa cap).
+- **Thermal guard:** rata-rata 3 sampel (6 s) terpisah GPU/CPU; turun bila GPU ≥92°C atau CPU ≥100°C (lalu tunggu 3 sampel);
+  naik bila GPU ≤86°C dan CPU ≤92°C selama 20 s. Monster90 min 60→75. Simulasi 9 log: monster90-unlimited V0.4 tidak lagi
+  turun; monster120 V0.3 (GPU 104°C) tetap turun 120→105 (t=43 s) →90 (t=51 s); sesi lain tidak tersentuh.
+- **Rekomendasi:** Monster pakai Target FPS game **Unlimited** (driver yang memacing); Cool60 pakai lock 60 + V-Sync ON.
+  Resolusi rasio panel 2.18:1: Cool60 1568×718, Monster90 1310×600, Monster120 1280×586 (→1176×539 bila < 100 fps).
+- **Analyzer:** detik fps < 5 (game di background) dibuang dari statistik.
+
 ### 2026-11-24 — V0.4: tuning dari log debug V0.3
 - **Cool60:** limiter driver OFF (pacing oleh V-Sync + Target FPS 60 game; dua pacer → V-Sync miss), GPU floor 40→60%,
   ADPF session biasa (power-efficient membiarkan CPU turun ke 0.5–0.9 GHz saat main). Field baru `target_fps` dipisah dari `fps_limit`.
