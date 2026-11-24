@@ -19,7 +19,7 @@ Driver Vulkan Turnip custom **xamonxx naga8gen5** untuk iQOO 15R (Adreno 829, SD
 
 - **V0.3 TESTED (debug, 2026-11-24):** log OK, floor accepted, ADPF ok; Cool60 tersendat, Monster90 GPU-bound ±57 fps,
   Monster120 ±98 fps tapi GPU 104°C; CPU dibatasi OS 2.36/2.48 GHz. Detail `test-results.md`.
-- **V0.4** (2026-11-24): Cool60 tanpa limiter + floor 60%, thermal guard Monster, logger GPU clock fallback. NOT TESTED.
+- **V0.4** (2026-11-24, release `v0.4`, CI 45433961982, audit PASS ×4, salinan `dist/v0.4/`): Cool60 tanpa limiter + floor 60%, thermal guard Monster, logger GPU clock fallback. NOT TESTED.
 
 ## Next steps
 1. Owner uji V0.4-debug: per mode ≥10 menit, jeda 10 menit, catat resolusi/profil; coba Game Space + Monster Mode.
