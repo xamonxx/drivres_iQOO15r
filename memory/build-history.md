@@ -7,6 +7,10 @@ type: build
 
 | Tanggal | Versi | Run CI | Mesa | Patch upstream | Flavor | Hasil | SHA256 zip |
 |---|---|---|---|---|---|---|---|
+| 2026-11-24 | V0.5-debug | 45441712908 | c5ef4bd | StevenMXZ 4b79649 + xamonxx/0001+0002 | perf, mode.txt + log CSV | **SUKSES** → release v0.5; audit PASS | 5505144789dda2121683fc291ce85450b78b0dd5e1bf30d5bfe12334e77d16cd |
+| 2026-11-24 | V0.5-monster120 | 45441712908 | c5ef4bd | StevenMXZ 4b79649 + xamonxx/0001+0002 | perf, floor max, limit 120, guard 6 s min 90 | **SUKSES** → release v0.5; audit PASS | 1a0819e50fd4318a4195a36f8c6a5d1f8971f29872c65323a3d4c3be1cd48e80 |
+| 2026-11-24 | V0.5-monster90 | 45441712908 | c5ef4bd | StevenMXZ 4b79649 + xamonxx/0001+0002 | perf, floor max, limit 90, guard 6 s min 75 | **SUKSES** → release v0.5; audit PASS | fd7ce1880564f88d13c053a2f204598f28e4a5f17db48e405e02c39d56df654c |
+| 2026-11-24 | V0.5-cool60 | 45441712908 | c5ef4bd | StevenMXZ 4b79649 + xamonxx/0001+0002 | perf, floor 60%, cap pengaman 63 | **SUKSES** → release v0.5; audit PASS | 545fe06c223a291f9fd3d8bd4b989204ec897576cc3ef341e2f2bc1b848bce1d |
 | 2026-11-24 | V0.4-debug | 45433961982 | c5ef4bd | StevenMXZ 4b79649 + xamonxx/0001+0002 | perf, mode.txt + log CSV (kolom guard & clock GPU) | **SUKSES** → release v0.4; audit PASS; cek CI: thermal guard ter-link, LOAD 0x4000 | 09e88ab974b58391215af5b9ff93a3639e006d1ca6611b5a31cdd6a989dd5c36 |
 | 2026-11-24 | V0.4-monster120 | 45433961982 | c5ef4bd | StevenMXZ 4b79649 + xamonxx/0001+0002 | perf, floor max, limit 120 + guard min 90 | **SUKSES** → release v0.4; audit PASS; cek CI: thermal guard ter-link, LOAD 0x4000 | c4f5c115a0b9f17c641706b85d5e2d0c93cc239d87e44effbb47268775edcad6 |
 | 2026-11-24 | V0.4-monster90 | 45433961982 | c5ef4bd | StevenMXZ 4b79649 + xamonxx/0001+0002 | perf, floor max, limit 90 + guard min 60 | **SUKSES** → release v0.4; audit PASS; cek CI: thermal guard ter-link, LOAD 0x4000 | bfac505f9a1c3a3dcc93617fa5b5c29f831e1fae07a7529bdbef20e256be8d5b |
