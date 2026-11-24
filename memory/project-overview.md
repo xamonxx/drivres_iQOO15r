@@ -15,13 +15,16 @@ Driver Vulkan Turnip custom **xamonxx naga8gen5** untuk iQOO 15R (Adreno 829, SD
 - **V0.2** (release `v0.2`, CI 45196163906, audit PASS, salinan di `C:\Users\Administrator\Downloads\GTA5_Drivers\`): + patch `xamonxx/0001` KGSL GPU frequency floor, varian `balanced` (60%) & `turbo` (max).
   Target owner: 90 fps (base) / 120 fps. NOT TESTED.
 - **V0.3** (2026-11-24, release `v0.3`, CI 45427857301, audit PASS ×4, salinan di `dist/v0.3/`): 4 zip — `cool60`, `monster90`, `monster120`, `debug` (mode via `mode.txt` + log CSV).
-  Fitur: FPS limiter, ADPF hint, GPU floor per mode, LOAD 16K-aligned, `tools/analyze_log.py`. NOT TESTED.
+  Fitur: FPS limiter, ADPF hint, GPU floor per mode, LOAD 16K-aligned, `tools/analyze_log.py`. Diuji (debug) — lihat baris berikut.
+
+- **V0.3 TESTED (debug, 2026-11-24):** log OK, floor accepted, ADPF ok; Cool60 tersendat, Monster90 GPU-bound ±57 fps,
+  Monster120 ±98 fps tapi GPU 104°C; CPU dibatasi OS 2.36/2.48 GHz. Detail `test-results.md`.
+- **V0.4** (2026-11-24): Cool60 tanpa limiter + floor 60%, thermal guard Monster, logger GPU clock fallback. NOT TESTED.
 
 ## Next steps
-1. Owner pasang V0.3-debug → cek `Download/xamonxx/` muncul → sesi 15 menit per mode (docs/TESTING.md) → kirim CSV.
-2. Agent jalankan `tools/analyze_log.py`, catat ke `test-results.md`; putuskan: floor Cool60 (40%) naik/turun,
-   ADPF berguna atau tidak, resolusi profil C bisa naik atau tidak.
-3. Bila debug zip crash saat start → curigai ADPF/logger; buat V0.3.1 dengan ADPF off.
+1. Owner uji V0.4-debug: per mode ≥10 menit, jeda 10 menit, catat resolusi/profil; coba Game Space + Monster Mode.
+2. Cek di log: Cool60 → detik 30–40 ms harus jauh berkurang; Monster120 → `fps_limit_now` turun & suhu < 95°C;
+   `cpu0_mhz` > 2361 bila Monster Mode berhasil membuka batas.
 
 ## Lingkungan
 - PC owner Windows 11; per 2026-11-24 `wsl -l` menunjukkan Ubuntu-24.04 (stopped, tanpa gcc) + docker-desktop (running),

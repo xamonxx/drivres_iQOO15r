@@ -5,6 +5,17 @@ updated: 2026-11-24
 type: decision
 ---
 
+### 2026-11-24 — V0.4: tuning dari log debug V0.3
+- **Cool60:** limiter driver OFF (pacing oleh V-Sync + Target FPS 60 game; dua pacer → V-Sync miss), GPU floor 40→60%,
+  ADPF session biasa (power-efficient membiarkan CPU turun ke 0.5–0.9 GHz saat main). Field baru `target_fps` dipisah dari `fps_limit`.
+- **Monster90/120:** thermal guard di driver — sensor `gpuss-*`/`cpu-*` tiap 2 s; ≥95°C dua kali → limit −15 fps (min 60 / 90),
+  ≤85°C 30 s → +15. ADPF target ikut di-update. Simulasi pada log monster120 V0.3: 120→105 (t=39 s) →90 (t=43 s).
+  Alasan: GPU 104°C/CPU 109°C dalam 2 menit; mengurangi frame satu-satunya tuas panas yang sah di level driver.
+- **Logger:** fallback clock GPU (`gpuclk`, `clock_mhz`, `/sys/kernel/gpu/gpu_clock`, devfreq), kolom baru `gpu_max_mhz`,
+  `gpu_thermal_level`, `fps_limit_now`, `guard_steps`. Analyzer membuang fase loading (GPU <30%) & 3 s terakhir.
+- **Tidak diubah:** GPU floor Monster tetap PWR_MAX (GPU sudah 99% busy, floor bukan sumber panas tambahan).
+- **Tidak bisa di driver:** batas CPU 2.36/2.48 GHz dari OS → owner coba Game Space + Monster Mode.
+
 ### 2026-11-24 — V0.3: mode Cool60 / Monster90 / Monster120 + debug zip dengan log
 - **Konteks:** owner minta driver per mode: 60 fps stabil & adem; 90/120 fps "monster clock CPU"; grafis tidak buriq;
   plus log otomatis untuk evaluasi. Launcher GTA V **tidak punya env var** → semua nilai dibenamkan per zip.

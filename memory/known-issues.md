@@ -6,17 +6,17 @@ type: issue
 ---
 
 ## Terbuka
-- **ADPF di proses game (Box64/Wine) UNKNOWN** — bila `adpf_status=unavailable` di log, mode Monster hanya mengandalkan
-  GPU floor + Monster Mode HP.
-- **Izin storage launcher untuk log debug UNKNOWN** — bila `Download/xamonxx/` tidak muncul, ambil via folder app/logcat (Shizuku).
-- **GPU floor 40% (Cool60) & PERC di KGSL gen8 belum terverifikasi** — lihat `gpu_floor_status` di log debug.
-- **Layar/app di 60 Hz** — benchmark V0.1 melaporkan `@ 60Hz`; >60 fps tidak mungkin terlihat sampai refresh HP
-  (Settings → Display → refresh rate tinggi / Game Space per-game) & Target FPS app dinaikkan.
-- **Stutter (min fps 8.8–28)** di benchmark V0.1 — target V0.2 GPU floor; perlu data uji.
-- **Dukungan KGSL PERC constraint UNKNOWN** — jika varian balanced ditolak kernel, floor tidak aktif (turbo pakai PWR_MAX, lebih kompatibel).
-- **Storage HP penuh (88%, ±27 GB bebas)** — GTA V butuh ±95–110 GB. Owner harus kosongkan storage dulu.
-- **PC owner tanpa virtualisasi** — build lokal (WSL2/Docker) tidak bisa; andalkan CI.
-- **Turnip a8xx masih matang bertahap** — kemungkinan glitch/crash di game tertentu; fallback V39 / Rutabaga.
+- **CPU dibatasi OS di 2361.6 / 2476.8 MHz saat main** (log V0.3, semua mode) — bukan driver. Coba Game Space + Monster Mode
+  untuk `com.thegwchr.fuzzy`; verifikasi lewat kolom `cpu0_mhz`/`cpu6_mhz`.
+- **Monster90 GPU-bound (99% busy, ±57 fps)** — perlu setting/resolusi lebih ringan; resolusi sesi V0.3 tidak tercatat.
+- **Monster120 panas (GPU 104°C, CPU 109°C dalam 2 menit)** — V0.4 thermal guard; perlu verifikasi di log V0.4.
+- **Clock GPU tidak terbaca (`gpu_freq_mhz` NA)** — V0.4 menambah fallback path; bila tetap NA = dibatasi SELinux.
+- **Layar/app di 60 Hz** — untuk >60 fps refresh HP & Target FPS app harus dinaikkan.
+- **Storage HP penuh (88%, ±27 GB bebas)** — GTA V butuh ±95–110 GB.
+- **PC owner tanpa build lokal** — andalkan CI.
+- **Turnip a8xx masih matang bertahap** — fallback V39 / Rutabaga.
 
 ## Selesai
+- 2026-11-24 — Cool60 V0.3 tersendat (V-Sync miss 25/42 detik) → V0.4: limiter off untuk Cool60, floor 60%.
+- 2026-11-24 — ADPF di proses Box64 / izin storage log / KGSL PERC: semua **terbukti jalan** (log V0.3).
 - 2026-11-23 — Cek simbol salah (`vk_icd*`) menggagalkan CI → diganti cek `HMI`.
