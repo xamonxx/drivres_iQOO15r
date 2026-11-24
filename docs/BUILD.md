@@ -1,6 +1,6 @@
 # BUILD — xamonxx naga8gen5
 
-## Pin versi saat ini (V0.2)
+## Pin versi saat ini (V0.3)
 | Komponen | Nilai |
 |---|---|
 | Mesa | `c5ef4bdfabf2e1a76d5e41ab8e5d75ddbc121275` (gitlab.freedesktop.org/mesa/mesa) |
@@ -30,22 +30,34 @@ CI menjalankan `perf`; bila gagal otomatis `safe` (zip bersuffix `-safe`).
 Catatan: `-mcpu=oryon-1` = tuning Oryon generasi 1 (subset fitur Oryon V3, aman). SVE2/SME sengaja **tidak** diaktifkan
 paksa — gain untuk kode driver tidak terbukti, risiko crash ada.
 
-## Varian GPU floor (V0.2+, patch `patches/xamonxx/0001_kgsl_gpu_floor.py`)
-| VARIANT | `XAMONXX_GPU_FLOOR` | Efek | Zip |
-|---|---|---|---|
-| `base` | 0 | tanpa floor (= perilaku V0.1) | `xamonxx_naga8gen5V0.2-base.zip` (tidak dirilis default) |
-| `balanced` | 60 | clock GPU tidak turun di bawah ~60% max saat game submit | `xamonxx_naga8gen5V0.2-balanced.zip` |
-| `turbo` | 1 (PWR_MAX) | clock GPU di level maksimum yang diizinkan termal | `xamonxx_naga8gen5V0.2-turbo.zip` |
+## Varian mode (V0.3, patch `patches/xamonxx/0001` + `0002` + `src/xamonxx.{c,h}`)
+| VARIANT | MODE_ID | GPU floor (KGSL) | Batas FPS | ADPF hint | Zip |
+|---|---|---|---|---|---|
+| `cool60` | 1 | 40% max clock | 60 | power-efficient | `xamonxx_naga8gen5V0.3-cool60.zip` |
+| `monster90` | 2 | PWR_MAX | 90 | boost | `xamonxx_naga8gen5V0.3-monster90.zip` |
+| `monster120` | 3 | PWR_MAX | 120 | boost | `xamonxx_naga8gen5V0.3-monster120.zip` |
+| `debug` | 1 + `mode.txt` | sesuai mode | sesuai mode | sesuai mode | `xamonxx_naga8gen5V0.3-debug.zip` (+ log CSV) |
+| `base` | 0 | off | off | off | tidak dirilis |
 
-Mekanisme: context KGSL dibuat dengan `KGSL_CONTEXT_PWR_CONSTRAINT`, lalu `IOCTL_KGSL_SETPROPERTY`
-`KGSL_PROP_PWR_CONSTRAINT` (`KGSL_CONSTRAINT_PWRLEVEL`). Kernel menerapkan per command batch dan
-membiarkannya kedaluwarsa saat game berhenti submit. Throttling termal tetap berlaku.
-Override runtime (Winlator env var / Mesa option): `XAMONXX_GPU_FLOOR=0..100|max`.
-Bila kernel menolak: log `xamonxx naga8gen5: KGSL rejected GPU floor ...` dan driver jalan tanpa floor.
+- **0001 (GPU floor):** context KGSL dibuat dengan `KGSL_CONTEXT_PWR_CONSTRAINT` + `IOCTL_KGSL_SETPROPERTY`
+  `KGSL_PROP_PWR_CONSTRAINT`. Level dari `xamonxx_get_config()`; hasil ioctl dilaporkan ke log. Throttling termal tetap berlaku.
+- **0002 (runtime):** salin `xamonxx.{c,h}` ke `src/vulkan/runtime/`, tambah ke `vulkan_lite_runtime_files`, panggil
+  `xamonxx_on_present()` di `vk_common_QueueSignalReleaseImageANDROID` (swapchain loader Android) dan `wsi_common_queue_present`.
+  - Limiter: `clock_nanosleep(TIMER_ABSTIME)` ke deadline tetap; telat > 1 frame → cadence di-reset (tanpa burst).
+  - ADPF: `dlopen("libandroid.so")` di thread terpisah → `APerformanceHint_createSession` untuk thread present,
+    lapor durasi kerja tiap frame. Tidak menambah `NEEDED`. Gagal = log `ADPF unavailable`, driver jalan terus.
+  - Debug (`-DXAMONXX_DEBUG=1`): folder `/sdcard/Download/xamonxx` → fallback `/data/data/<pkg>/files/xamonxx` →
+    `$TMPDIR`/`$HOME` → hanya logcat. `mode.txt` dibuat otomatis (`cool60`). Thread logger 1 baris/detik, maks 5 MB/file,
+    simpan 20 file terbaru. Analisis: `python -I tools/analyze_log.py <csv>`.
+- Override env (launcher yang punya env var): `XAMONXX_MODE`, `XAMONXX_GPU_FLOOR=0..100|max`, `XAMONXX_FPS_LIMIT`, `XAMONXX_ADPF=0..2`.
+- Linker: `-Wl,-z,max-page-size=16384` (HP melaporkan `ro.product.cpu.pagesize.max=16384`); `package_driver` memverifikasi
+  align LOAD = `0x4000` dan string penanda runtime/logger ter-link.
+- Uji lokal tanpa build penuh: patch chain + 0001/0002 di-apply ke file Mesa c5ef4bd (scratchpad) → semua anchor cocok;
+  `xamonxx.c` lolos `gcc -Wall -Wextra -fsyntax-only` (mingw + shim POSIX). Build penuh tetap via CI.
 
 ## Cara build
 - **CI (disarankan):** GitHub → Actions → *Build xamonxx naga8gen5 driver* → Run workflow. Hasil: Release `v<VERSION>` + artifact per varian.
-- **Lokal (Linux x86_64 / WSL2):** `VARIANT=balanced bash build_naga8gen5.sh` (VARIANT=base|balanced|turbo, FLAVOR=perf|safe). Output: `turnip_workdir/xamonxx_naga8gen5V<VERSION>-<VARIANT>.zip`.
+- **Lokal (Linux x86_64 / WSL2):** `VARIANT=cool60 bash build_naga8gen5.sh` (VARIANT=base|cool60|monster90|monster120|debug, FLAVOR=perf|safe). Output: `turnip_workdir/xamonxx_naga8gen5V<VERSION>-<VARIANT>.zip`.
   PC owner saat ini: virtualisasi BIOS mati → WSL2/Docker tidak bisa → pakai CI.
 
 ## Checklist naik versi
