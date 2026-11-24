@@ -1,9 +1,25 @@
 ---
 name: decisions
 description: Log keputusan teknis (terbaru di atas)
-updated: 2026-11-23
+updated: 2026-11-24
 type: decision
 ---
+
+### 2026-11-24 — V0.3: mode Cool60 / Monster90 / Monster120 + debug zip dengan log
+- **Konteks:** owner minta driver per mode: 60 fps stabil & adem; 90/120 fps "monster clock CPU"; grafis tidak buriq;
+  plus log otomatis untuk evaluasi. Launcher GTA V **tidak punya env var** → semua nilai dibenamkan per zip.
+- **Keputusan:**
+  - Modul `patches/xamonxx/src/xamonxx.{c,h}` (dipasang oleh `0002_xamonxx_runtime.py`): tabel mode, FPS limiter,
+    ADPF hint, logger debug. Hook present di `vk_common_QueueSignalReleaseImageANDROID` + `wsi_common_queue_present`.
+  - 0001 diubah: level floor dari `xamonxx_get_config()` (macro `XAMONXX_GPU_FLOOR` dihapus), hasil ioctl dilaporkan.
+  - Cool60 = floor 40% + limit 60 + ADPF power-efficient. Monster = floor PWR_MAX + limit 90/120 + ADPF boost.
+  - Debug zip: mode dari `Download/xamonxx/mode.txt` (default cool60), CSV 1 baris/detik, thread terpisah.
+  - Plan awal menyebut patch 0002/0003/0004 terpisah; digabung jadi satu modul C + satu skrip karena berbagi state.
+  - `-Wl,-z,max-page-size=16384` karena `pagesize.max=16384` di HP.
+- **Alasan CPU via ADPF:** satu-satunya jalur resmi tanpa root untuk memengaruhi clock CPU. Hanya hint; OS memutuskan.
+- **Ditolak:** tulis sysfs cpufreq/governor (dilarang AGENTS.md §6), paksa SVE2/SME (keputusan 2026-11-23 tetap).
+- **Risiko:** ADPF di proses Box64 bisa `unavailable` (aman, fallback). Nilai floor 40% belum terukur.
+  Limiter + V-Sync game bisa saling menunggu → di Monster set Target FPS launcher Unlimited & V-Sync OFF.
 
 ### 2026-11-23 — V0.2: KGSL GPU frequency floor (patch xamonxx/0001)
 - **Konteks:** owner minta target 90/120 fps. Benchmark V0.1 ter-cap 60 (Target FPS 60, layar 60 Hz) dengan
